@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { organize } from './commands/organize';
 import { preview } from './commands/preview';
 import { init } from './commands/init';
+import { cache } from './commands/cache';
 
 const program = new Command();
 
@@ -16,6 +17,7 @@ program
   .command('init')
   .description('Initialize configuration file')
   .option('--force', 'Overwrite existing config file')
+  .option('--no-interactive', 'Skip interactive setup and use defaults')
   .option('-c, --config <path>', 'Custom config file path')
   .action(init);
 
@@ -35,5 +37,12 @@ program
   .option('-r, --recursive', 'Include subdirectories')
   .option('-c, --config <path>', 'Custom config file path')
   .action(preview);
+
+program
+  .command('cache')
+  .description('Manage suggestion cache')
+  .argument('<action>', 'Cache action: clear, clean, stats')
+  .option('-d, --directory <path>', 'Specific directory for cache operations')
+  .action(cache);
 
 program.parse();

@@ -38,21 +38,32 @@ npm install -g .
 
 ## Quick Start
 
-1. **Initialize configuration**:
+1. **Interactive setup** (recommended):
    ```bash
    organ-ai-zer init
    ```
+   Follow the interactive prompts to configure AI provider, API key, and preferences.
 
-2. **Add your API key** to the config file (location shown after init)
-
-3. **Preview organization**:
+2. **Preview organization**:
    ```bash
    organ-ai-zer preview ~/Downloads
    ```
 
-4. **Organize files**:
+3. **Organize files**:
    ```bash
    organ-ai-zer organize ~/Downloads
+   ```
+
+### Alternative: Non-Interactive Setup
+
+1. **Create default config**:
+   ```bash
+   organ-ai-zer init --no-interactive
+   ```
+
+2. **Edit config file** to add your API key:
+   ```bash
+   nano ~/.organ-ai-zer/config.json
    ```
 
 ## Configuration
@@ -168,7 +179,7 @@ Example for documents:
 ## Commands
 
 ### `init`
-Initialize configuration file.
+Initialize configuration file with interactive setup.
 
 ```bash
 organ-ai-zer init [options]
@@ -176,11 +187,21 @@ organ-ai-zer init [options]
 
 **Options:**
 - `--force`: Overwrite existing config file
+- `--no-interactive`: Skip interactive setup, use defaults
 - `-c, --config <path>`: Custom config file path
 
-**Example:**
+**Examples:**
 ```bash
+# Interactive setup (recommended)
+organ-ai-zer init
+
+# Non-interactive with defaults
+organ-ai-zer init --no-interactive
+
+# Force overwrite existing config
 organ-ai-zer init --force
+
+# Custom config location
 organ-ai-zer init -c /path/to/custom/config.json
 ```
 

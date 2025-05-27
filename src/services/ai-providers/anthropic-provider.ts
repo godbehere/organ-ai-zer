@@ -26,6 +26,9 @@ export class AnthropicProvider extends BaseAIProvider {
     try {
       const prompt = this.buildPrompt(request);
       
+      console.log(`🔗 Making Anthropic API call with ${request.files.length} files...`);
+      console.log(`📋 Model: ${this.model}, Max Tokens: ${this.maxTokens}, Temperature: ${this.temperature}`);
+      
       const message = await this.client.messages.create({
         model: this.model,
         max_tokens: this.maxTokens,
@@ -38,11 +41,14 @@ export class AnthropicProvider extends BaseAIProvider {
         ]
       });
 
+      console.log(`📥 Received response from Anthropic API`);
+
       const content = message.content[0];
       if (content.type !== 'text') {
         throw new Error('Unexpected response type from Anthropic');
       }
 
+      console.log(`📝 Parsing AI response...`);
       const parsedResponse = this.parseAIResponse(content.text);
       
       // Map the file objects back to the suggestions
@@ -54,8 +60,16 @@ export class AnthropicProvider extends BaseAIProvider {
         };
       });
 
+      console.log(`✅ Successfully parsed ${parsedResponse.suggestions.length} suggestions`);
       return parsedResponse;
     } catch (error) {
+      console.error(`🚨 Anthropic Provider Error Details:`, {
+        message: error instanceof Error ? error.message : String(error),
+        model: this.model,
+        maxTokens: this.maxTokens,
+        filesCount: request.files.length
+      });
+      
       if (error instanceof Error) {
         throw new Error(`Anthropic API error: ${error.message}`);
       }

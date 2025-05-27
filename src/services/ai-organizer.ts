@@ -2,27 +2,26 @@ import { FileInfo, OrganizationSuggestion, UserConfig } from '../types';
 import { ConfigService } from './config-service';
 import { OpenAIProvider, AnthropicProvider, BaseAIProvider } from './ai-providers';
 import { FileScanner } from './file-scanner';
+import { SuggestionCache } from './suggestion-cache';
 import * as path from 'path';
 
 export class AIOrganizer {
   private configService: ConfigService;
   private aiProvider: BaseAIProvider | null = null;
   private fileScanner = new FileScanner();
+  private cache = SuggestionCache.getInstance();
 
   constructor(configService?: ConfigService) {
     this.configService = configService || ConfigService.getInstance();
   }
 
-  async generateSuggestions(files: FileInfo[]): Promise<OrganizationSuggestion[]> {
+  async generateSuggestions(files: FileInfo[], useCache: boolean = true): Promise<OrganizationSuggestion[]> {
     const config = await this.configService.loadConfig();
     
     // Validate API key
     if (!config.ai.apiKey) {
       throw new Error('No API key configured. Please run "organ-ai-zer init" and add your API key to the config file.');
     }
-
-    // Initialize AI provider
-    await this.initializeAIProvider(config);
 
     // Filter files based on config
     const filteredFiles = this.filterFiles(files, config);
@@ -32,8 +31,26 @@ export class AIOrganizer {
       return [];
     }
 
-    // Get existing directory structure for context
     const baseDirectory = path.dirname(filteredFiles[0].path);
+    const configHash = this.configService.getConfigHash();
+
+    // Check cache first if enabled
+    if (useCache) {
+      const cachedSuggestions = await this.cache.getCachedSuggestions(
+        baseDirectory,
+        filteredFiles,
+        configHash
+      );
+      
+      if (cachedSuggestions) {
+        return cachedSuggestions;
+      }
+    }
+
+    // Initialize AI provider with appropriate token count
+    await this.initializeAIProvider(config, filteredFiles.length);
+
+    // Get existing directory structure for context
     const existingStructure = await this.getExistingStructure(baseDirectory);
 
     // Prepare user preferences for AI
@@ -41,6 +58,7 @@ export class AIOrganizer {
 
     try {
       // Call AI service
+      console.log(`🤖 Calling ${config.ai.provider} API with model ${config.ai.model}...`);
       const aiResponse = await this.aiProvider!.analyzeFiles({
         files: filteredFiles,
         baseDirectory,
@@ -48,22 +66,53 @@ export class AIOrganizer {
         userPreferences
       });
 
+      console.log(`✅ AI analysis completed with ${aiResponse.suggestions.length} suggestions`);
+
       // Convert AI response to OrganizationSuggestion format
       const suggestions = this.convertToOrganizationSuggestions(aiResponse.suggestions);
 
       // Apply post-processing filters
-      return this.postProcessSuggestions(suggestions, config);
+      const finalSuggestions = this.postProcessSuggestions(suggestions, config);
+
+      // Cache the results if we have any
+      if (finalSuggestions.length > 0 && useCache) {
+        await this.cache.cacheSuggestions(
+          baseDirectory,
+          filteredFiles,
+          finalSuggestions,
+          configHash
+        );
+      }
+
+      return finalSuggestions;
     } catch (error) {
-      console.error('❌ AI analysis failed, falling back to rule-based organization');
+      console.error('❌ AI analysis failed:', error instanceof Error ? error.message : error);
+      console.error('🔄 Falling back to rule-based organization');
       return this.fallbackToRuleBasedOrganization(filteredFiles);
     }
   }
 
-  private async initializeAIProvider(config: UserConfig): Promise<void> {
+  private async initializeAIProvider(config: UserConfig, fileCount: number = 1): Promise<void> {
+    // Calculate appropriate token limit based on file count
+    // Each file suggestion needs ~250-300 tokens, plus overhead
+    const baseTokens = config.ai.maxTokens || 1000;
+    const tokensPerFile = 300;
+    const overhead = 500;
+    const calculatedTokens = Math.max(baseTokens, (fileCount * tokensPerFile) + overhead);
+    
+    // Cap at reasonable limits for each provider
+    const maxTokens = config.ai.provider === 'anthropic' ? 
+      Math.min(calculatedTokens, 4000) : 
+      Math.min(calculatedTokens, 4000);
+
+    if (calculatedTokens > baseTokens) {
+      console.log(`📈 Increasing token limit from ${baseTokens} to ${maxTokens} for ${fileCount} files`);
+    }
+
     const aiConfig = {
       apiKey: config.ai.apiKey,
       model: config.ai.model,
-      maxTokens: config.ai.maxTokens,
+      maxTokens: maxTokens,
       temperature: config.ai.temperature,
       timeout: config.ai.timeout
     };

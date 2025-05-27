@@ -9,7 +9,7 @@ export interface AIAnalysisRequest {
 
 export interface AIAnalysisResponse {
   suggestions: Array<{
-    file: FileInfo;
+    file: FileInfo | null;
     suggestedPath: string;
     reason: string;
     confidence: number;
@@ -102,7 +102,42 @@ Important: Only return valid JSON. Do not include any explanatory text outside t
     try {
       // Try to extract JSON from the response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? jsonMatch[0] : response;
+      let jsonStr = jsonMatch ? jsonMatch[0] : response;
+      
+      // Handle truncated JSON by attempting to fix common issues
+      if (!jsonStr.endsWith('}')) {
+        console.log('⚠️  Detected truncated JSON response, attempting to fix...');
+        
+        // Find the last complete suggestion object
+        const suggestionPattern = /\{\s*"fileName":[^}]+\}/g;
+        const suggestions = [];
+        let match;
+        
+        while ((match = suggestionPattern.exec(response)) !== null) {
+          try {
+            const suggestion = JSON.parse(match[0]);
+            suggestions.push(suggestion);
+          } catch (e) {
+            // Skip malformed suggestions
+            console.log('⚠️  Skipping malformed suggestion');
+          }
+        }
+        
+        if (suggestions.length > 0) {
+          console.log(`✅ Recovered ${suggestions.length} suggestions from truncated response`);
+          return {
+            suggestions: suggestions.map((s: any) => ({
+              file: null, // Will be filled in by the caller
+              suggestedPath: s.suggestedPath,
+              reason: s.reason,
+              confidence: Math.min(Math.max(s.confidence || 0.5, 0), 1),
+              category: s.category,
+              metadata: s.metadata
+            })),
+            reasoning: 'Recovered from truncated response'
+          };
+        }
+      }
       
       const parsed = JSON.parse(jsonStr);
       
@@ -122,7 +157,7 @@ Important: Only return valid JSON. Do not include any explanatory text outside t
         reasoning: parsed.reasoning || 'No reasoning provided'
       };
     } catch (error) {
-      throw new Error(`Failed to parse AI response: ${error}. Response: ${response}`);
+      throw new Error(`Failed to parse AI response: ${error}. Response: ${response.substring(0, 500)}...`);
     }
   }
 }
