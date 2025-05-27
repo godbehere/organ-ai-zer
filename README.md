@@ -54,6 +54,16 @@ npm install -g .
    organ-ai-zer organize ~/Downloads
    ```
 
+### New: Interactive AI Organization
+
+For complex organization needs, use the conversational AI feature:
+
+```bash
+organ-ai-zer interactive ~/Media --recursive
+```
+
+This starts a conversation where you describe how you want files organized, and the AI iteratively refines suggestions based on your feedback. Perfect for media libraries, project files, and custom organization schemes.
+
 ### Alternative: Non-Interactive Setup
 
 1. **Create default config**:
@@ -222,6 +232,32 @@ organ-ai-zer preview ~/Downloads
 organ-ai-zer preview ~/Documents --recursive
 organ-ai-zer preview ~/Photos -c custom-config.json
 ```
+
+### `interactive`
+Interactive AI-guided organization with conversation.
+
+```bash
+organ-ai-zer interactive <directory> [options]
+```
+
+**Options:**
+- `-r, --recursive`: Include subdirectories
+- `-d, --dry-run`: Simulate organization without moving files
+- `-c, --config <path>`: Custom config file path
+
+**Example:**
+```bash
+# Interactive media library organization
+organ-ai-zer interactive ~/Media --recursive
+
+# Test with dry run first
+organ-ai-zer interactive ~/Downloads --dry-run
+
+# Organize work projects interactively
+organ-ai-zer interactive ~/Projects -c work-config.json
+```
+
+This command starts a conversation where you describe your organization goals, and the AI iteratively refines suggestions based on your feedback. See [INTERACTIVE_ORGANIZE.md](INTERACTIVE_ORGANIZE.md) for detailed usage examples.
 
 ### `organize`
 Organize files according to AI suggestions.

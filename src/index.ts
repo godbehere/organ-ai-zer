@@ -5,6 +5,7 @@ import { organize } from './commands/organize';
 import { preview } from './commands/preview';
 import { init } from './commands/init';
 import { cache } from './commands/cache';
+import { interactiveOrganize } from './commands/interactive-organize';
 
 const program = new Command();
 
@@ -37,6 +38,15 @@ program
   .option('-r, --recursive', 'Include subdirectories')
   .option('-c, --config <path>', 'Custom config file path')
   .action(preview);
+
+program
+  .command('interactive')
+  .description('Interactive AI-guided organization with conversation')
+  .argument('<directory>', 'Directory to organize interactively')
+  .option('-r, --recursive', 'Include subdirectories')
+  .option('-c, --config <path>', 'Custom config file path')
+  .option('-d, --dry-run', 'Simulate organization without moving files')
+  .action(interactiveOrganize);
 
 program
   .command('cache')
