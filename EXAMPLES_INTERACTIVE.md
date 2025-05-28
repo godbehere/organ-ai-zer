@@ -10,7 +10,7 @@ User has a mixed media collection with movies, TV shows, and music that needs sy
 ### Conversation Flow
 
 ```bash
-$ organ-ai-zer interactive ~/Media --recursive
+$ organ-ai-zer interactive ~/Media
 
 🤖 Starting conversational AI organization for: /home/user/Media
 
@@ -155,7 +155,7 @@ Freelance designer with mixed client files needs organization by client and proj
 ### Conversation Flow
 
 ```bash
-$ organ-ai-zer interactive ~/Work --recursive --dry-run
+$ organ-ai-zer interactive ~/Work --dry-run
 
 🤖 Starting interactive AI organization for: /home/user/Work
 
@@ -303,7 +303,7 @@ Developer with mixed personal and work projects needs clear separation and organ
 ### Conversation Flow
 
 ```bash
-$ organ-ai-zer interactive ~/Code --recursive
+$ organ-ai-zer interactive ~/Code
 
 📝 Let's understand how you want to organize your files...
 

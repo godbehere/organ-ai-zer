@@ -41,10 +41,26 @@ interface OrganizationStrategy {
   uncertaintyThreshold: number;
 }
 
+interface ConversationMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  timestamp?: Date;
+}
+
+interface ConversationContext {
+  mediaType: string;
+  sampleFiles: string[];
+  userGoal: string;
+  currentSuggestion?: { folder: string; naming: string; reasoning: string };
+  attemptCount: number;
+  conversationHistory: ConversationMessage[];
+}
+
 export class ConversationalAIOrganizer {
   private configService: ConfigService;
   private aiProvider: BaseAIProvider | null = null;
   private fileScanner = new FileScanner();
+  private conversationContext: ConversationContext | null = null;
 
   constructor(configService?: ConfigService) {
     this.configService = configService || ConfigService.getInstance();
@@ -74,7 +90,7 @@ export class ConversationalAIOrganizer {
     const spinner = ora('Scanning directory structure...').start();
     
     try {
-      // Get all files recursively
+      // Get all files recursively (interactive mode always scans recursively)
       const files = await this.fileScanner.scanDirectory(targetDirectory, true);
       
       // Analyze file types and patterns
@@ -834,6 +850,8 @@ Be thorough and intelligent in your analysis. The user wants to see categories t
           'TV Shows/Game of Thrones/Game of Thrones S01E01.mkv'
         ]
       };
+    } else if (preference.includes('Custom')) {
+      return await this.getCustomTVShowRule(files);
     } else {
       return {
         type: 'TV Shows',
@@ -886,6 +904,8 @@ Be thorough and intelligent in your analysis. The user wants to see categories t
           'Movies/2019/Avengers Endgame (2019) [1080p].mkv'
         ]
       };
+    } else if (preference.includes('Custom')) {
+      return await this.getCustomMovieRule(files);
     } else {
       return {
         type: 'Movies',
@@ -1154,6 +1174,755 @@ Be thorough and intelligent in your analysis. The user wants to see categories t
       naming: responses.naming,
       examples: [`${responses.folder}example-file.ext`]
     };
+  }
+
+  private async getCustomTVShowRule(files: string[]): Promise<FileTypeRule> {
+    console.log(`\n🔧 Let's create a custom TV show organization structure...`);
+    
+    const { customType } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'customType',
+        message: 'How would you like to specify your custom structure?',
+        choices: [
+          'I have a specific pattern in mind (technical)',
+          'Let me describe what I want in plain language',
+          'Suggest something for a specific use case (e.g., Plex, Jellyfin)'
+        ]
+      }
+    ]);
+
+    if (customType.includes('specific pattern')) {
+      return await this.getSpecificPattern('TV Shows', files);
+    } else if (customType.includes('plain language')) {
+      return await this.getNaturalLanguagePattern('TV Shows', files);
+    } else {
+      return await this.getUseCasePattern('TV Shows', files);
+    }
+  }
+
+  private async getCustomMovieRule(files: string[]): Promise<FileTypeRule> {
+    console.log(`\n🔧 Let's create a custom movie organization structure...`);
+    
+    const { customType } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'customType',
+        message: 'How would you like to specify your custom structure?',
+        choices: [
+          'I have a specific pattern in mind (technical)',
+          'Let me describe what I want in plain language',
+          'Suggest something for a specific use case (e.g., Plex, Jellyfin)'
+        ]
+      }
+    ]);
+
+    if (customType.includes('specific pattern')) {
+      return await this.getSpecificPattern('Movies', files);
+    } else if (customType.includes('plain language')) {
+      return await this.getNaturalLanguagePattern('Movies', files);
+    } else {
+      return await this.getUseCasePattern('Movies', files);
+    }
+  }
+
+  private async getSpecificPattern(mediaType: string, files: string[]): Promise<FileTypeRule> {
+    console.log(`\n📋 Technical Pattern for ${mediaType}:`);
+    console.log('Use placeholders like [Show], [Season], [Episode], [Year], [Quality]');
+    
+    const responses = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'folder',
+        message: 'Folder structure (use [placeholders]):',
+        default: mediaType === 'Movies' ? 'Movies/[Movie (Year)]/' : 'TV Shows/[Show]/Season [##]/',
+        validate: input => input.trim().length > 0 || 'Please enter a folder structure'
+      },
+      {
+        type: 'input',
+        name: 'naming',
+        message: 'File naming convention:',
+        default: 'Clean names with key information',
+        validate: input => input.trim().length > 0 || 'Please enter a naming convention'
+      }
+    ]);
+
+    const examples = this.generateExamplesFromPattern(responses.folder, responses.naming, mediaType, files);
+
+    return {
+      type: mediaType,
+      pattern: 'custom_specific',
+      folder: responses.folder,
+      naming: responses.naming,
+      examples
+    };
+  }
+
+  private async getNaturalLanguagePattern(mediaType: string, files: string[]): Promise<FileTypeRule> {
+    console.log(`\n💬 Natural Language Request for ${mediaType}:`);
+    console.log('Describe what you want in your own words...');
+    
+    const { description } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'description',
+        message: `How would you like your ${mediaType.toLowerCase()} organized?`,
+        default: `Example: "I want files organized like Plex recommends" or "Add more details to filenames"`,
+        validate: input => input.trim().length > 10 || 'Please provide a more detailed description'
+      }
+    ]);
+
+    // Use AI to interpret the natural language request
+    const interpretedPattern = await this.interpretNaturalLanguageRequest(description, mediaType, files);
+    
+    return interpretedPattern;
+  }
+
+  private async getUseCasePattern(mediaType: string, files: string[]): Promise<FileTypeRule> {
+    console.log(`\n🎯 Use Case Pattern for ${mediaType}:`);
+    
+    const { useCase } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'useCase',
+        message: `Which media server or use case are you optimizing for?`,
+        choices: [
+          'Plex Media Server (recommended structure)',
+          'Jellyfin Media Server',
+          'Kodi/XBMC',
+          'General media collection (highly organized)',
+          'Simple structure (easy browsing)'
+        ]
+      }
+    ]);
+
+    return this.generateUseCasePattern(useCase, mediaType, files);
+  }
+
+  private async interpretNaturalLanguageRequest(description: string, mediaType: string, files: string[]): Promise<FileTypeRule> {
+    return await this.conductAIConversation(description, mediaType, files);
+  }
+
+  private async conductAIConversation(description: string, mediaType: string, files: string[], attempt: number = 1): Promise<FileTypeRule> {
+    // Initialize conversation context if this is the first attempt
+    if (attempt === 1) {
+      this.initializeConversationContext(description, mediaType, files);
+    }
+
+    const spinner = ora('🤖 Understanding your request...').start();
+    
+    try {
+      // Add user message to conversation history
+      this.addToConversationHistory('user', description);
+
+      // Use AI conversation loop to get suggestion
+      const aiSuggestion = await this.getAISuggestionWithContext();
+      
+      // Add AI response to conversation history
+      this.addToConversationHistory('assistant', 
+        `I suggest: Folder: "${aiSuggestion.folder}", Naming: "${aiSuggestion.naming}", Reasoning: ${aiSuggestion.reasoning}`
+      );
+
+      // Update current suggestion in context
+      if (this.conversationContext) {
+        this.conversationContext.currentSuggestion = aiSuggestion;
+        this.conversationContext.attemptCount = attempt;
+      }
+      
+      spinner.succeed('✅ AI generated a suggestion based on our conversation');
+      
+      console.log(`\n💡 AI Interpretation: ${aiSuggestion.reasoning}`);
+      console.log(`📁 Suggested structure: ${aiSuggestion.folder}`);
+      console.log(`🏷️  Naming: ${aiSuggestion.naming}`);
+      
+      const { userAction } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'userAction',
+          message: 'What would you like to do with this suggestion?',
+          choices: [
+            'Perfect! Use this structure',
+            'Good direction, but let me refine it',
+            'Not quite right, let me explain differently',
+            'I\'ll specify the pattern manually instead'
+          ]
+        }
+      ]);
+
+      if (userAction.includes('Perfect')) {
+        this.addToConversationHistory('user', 'Perfect! I\'ll use this structure.');
+        const examples = this.generateExamplesFromPattern(aiSuggestion.folder, aiSuggestion.naming, mediaType, files);
+        
+        // Clear conversation context when done
+        this.clearConversationContext();
+        
+        return {
+          type: mediaType,
+          pattern: 'custom_ai_conversation',
+          folder: aiSuggestion.folder,
+          naming: aiSuggestion.naming,
+          examples
+        };
+      } else if (userAction.includes('refine')) {
+        return await this.refineAISuggestion(aiSuggestion, mediaType, files, attempt);
+      } else if (userAction.includes('explain differently')) {
+        this.addToConversationHistory('user', 'Let me explain what I want differently.');
+        return await this.getNewDescription(mediaType, files, attempt + 1);
+      } else {
+        this.addToConversationHistory('user', 'I\'ll specify the pattern manually instead.');
+        this.clearConversationContext();
+        console.log('Switching to manual pattern specification...');
+        return await this.getSpecificPattern(mediaType, files);
+      }
+
+    } catch (error) {
+      spinner.fail('AI conversation failed, falling back to manual input');
+      this.clearConversationContext();
+      return await this.getSpecificPattern(mediaType, files);
+    }
+  }
+
+  private initializeConversationContext(description: string, mediaType: string, files: string[]): void {
+    this.conversationContext = {
+      mediaType,
+      sampleFiles: files.slice(0, 5),
+      userGoal: description,
+      attemptCount: 1,
+      conversationHistory: [
+        {
+          role: 'system',
+          content: `You are an expert file organization assistant helping a user create a custom organization structure for their ${mediaType} files. 
+
+The user has these sample files: ${files.slice(0, 5).join(', ')}
+
+CRITICAL: You MUST respond ONLY with valid JSON. Do not include any explanatory text, greetings, or additional content outside the JSON.
+
+Required JSON format:
+{
+  "folder": "folder structure with placeholders like [Movie], [Year], [Genre]",
+  "naming": "description of naming convention",
+  "reasoning": "explanation of why this structure fits the user's request"
+}
+
+Throughout this conversation:
+1. Remember all previous suggestions and user feedback
+2. Build upon previous discussions rather than starting fresh
+3. Be specific about folder structures using placeholders like [Show], [Season], [Movie], [Year], [Quality], [Genre]
+4. Consider popular media server requirements if mentioned (Plex, Jellyfin, Kodi)
+5. Adapt suggestions based on user refinements and preferences
+6. ALWAYS respond with valid JSON only - no other text
+
+Goal: Help the user create the perfect organization structure through iterative conversation.`,
+          timestamp: new Date()
+        }
+      ]
+    };
+  }
+
+  private addToConversationHistory(role: 'user' | 'assistant', content: string): void {
+    if (this.conversationContext) {
+      this.conversationContext.conversationHistory.push({
+        role,
+        content,
+        timestamp: new Date()
+      });
+    }
+  }
+
+  private clearConversationContext(): void {
+    this.conversationContext = null;
+  }
+
+  private async getAISuggestionWithContext(): Promise<{ folder: string; naming: string; reasoning: string }> {
+    if (!this.conversationContext || !this.aiProvider) {
+      throw new Error('Conversation context or AI provider not initialized');
+    }
+
+    try {
+      // Use the full conversation history for context-aware AI responses
+      const response = await this.callAIWithConversationHistory();
+      
+      // Try to extract JSON from the response
+      const parsed = this.parseAIResponseToJSON(response);
+      
+      if (!parsed.folder || !parsed.naming || !parsed.reasoning) {
+        throw new Error('Invalid AI response format - missing required fields');
+      }
+      
+      return {
+        folder: parsed.folder,
+        naming: parsed.naming,
+        reasoning: parsed.reasoning
+      };
+      
+    } catch (error) {
+      console.warn('AI conversation failed, using fallback:', error);
+      // Fallback to keyword interpretation if AI fails
+      const lastUserMessage = this.conversationContext.conversationHistory
+        .filter(msg => msg.role === 'user')
+        .pop()?.content || this.conversationContext.userGoal;
+      
+      return this.interpretDescriptionWithContext(
+        lastUserMessage, 
+        this.conversationContext.mediaType, 
+        this.conversationContext.attemptCount
+      );
+    }
+  }
+
+  private parseAIResponseToJSON(response: string): any {
+    try {
+      // First try direct JSON parsing
+      return JSON.parse(response);
+    } catch (error) {
+      // If that fails, try to extract JSON from the response text
+      try {
+        // Look for JSON object in the response
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+        
+        // If no JSON found, try to extract key information and construct JSON
+        const folderMatch = response.match(/folder["\s:]*([^,\n]+)/i);
+        const namingMatch = response.match(/naming["\s:]*([^,\n]+)/i);
+        const reasoningMatch = response.match(/reasoning["\s:]*([^,\n]+)/i);
+        
+        if (folderMatch || namingMatch || reasoningMatch) {
+          return {
+            folder: folderMatch?.[1]?.replace(/['"]/g, '').trim() || 'Movies/[Movie (Year)]/',
+            naming: namingMatch?.[1]?.replace(/['"]/g, '').trim() || 'Clean movie names with year',
+            reasoning: reasoningMatch?.[1]?.replace(/['"]/g, '').trim() || 'AI-generated organization structure'
+          };
+        }
+        
+        throw new Error('No JSON or structured data found in response');
+      } catch (extractError) {
+        console.warn('Failed to extract structured data from AI response:', response.substring(0, 200));
+        throw new Error('Could not parse AI response as JSON or extract structured data');
+      }
+    }
+  }
+
+  private async callAIWithConversationHistory(): Promise<string> {
+    if (!this.aiProvider || !this.conversationContext) {
+      throw new Error('AI provider or conversation context not initialized');
+    }
+
+    const messages = this.conversationContext.conversationHistory.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+
+    // Add a final system reminder about JSON format if the last message is from user
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.role === 'user') {
+      messages.push({
+        role: 'user',
+        content: 'Please respond with ONLY valid JSON in this exact format: {"folder": "structure here", "naming": "description here", "reasoning": "explanation here"}. Do not include any other text outside the JSON.'
+      });
+    }
+
+    // Different providers have different interfaces
+    try {
+      // For OpenAI provider
+      if ((this.aiProvider as any).client) {
+        const openaiProvider = this.aiProvider as any;
+        const completion = await openaiProvider.client.chat.completions.create({
+          model: openaiProvider.model,
+          messages: messages,
+          max_tokens: 800,
+          temperature: 0.3
+        });
+
+        return completion.choices[0]?.message?.content || '';
+      }
+      
+      // For Anthropic provider  
+      if ((this.aiProvider as any).anthropic) {
+        const anthropicProvider = this.aiProvider as any;
+        // Convert to Anthropic format (system message separate)
+        const systemMessage = messages.find(m => m.role === 'system')?.content || '';
+        const conversationMessages = messages.filter(m => m.role !== 'system');
+        
+        const response = await anthropicProvider.anthropic.messages.create({
+          model: anthropicProvider.model,
+          max_tokens: 800,
+          temperature: 0.3,
+          system: systemMessage,
+          messages: conversationMessages
+        });
+
+        return response.content[0]?.text || '';
+      }
+      
+      throw new Error('Unsupported AI provider for conversation');
+      
+    } catch (error) {
+      console.error('AI conversation call failed:', error);
+      throw error;
+    }
+  }
+
+  private async getAIPatternSuggestion(description: string, mediaType: string, files: string[], attempt: number): Promise<{ folder: string; naming: string; reasoning: string }> {
+    if (!this.aiProvider) {
+      throw new Error('AI provider not initialized');
+    }
+
+    const sampleFileNames = files.slice(0, 5).join(', ');
+    
+    const contextualPrompt = attempt > 1 ? 
+      `Building on our previous conversation about organizing ${mediaType} files, the user provided this additional guidance: "${description}"
+
+Please refine the organization approach based on this new input.` :
+      `The user wants to organize their ${mediaType} files and described their preference as: "${description}"`;
+
+    const prompt = `You are an expert file organization assistant helping a user create a custom organization structure for their ${mediaType} files.
+
+${contextualPrompt}
+
+Sample files: ${sampleFileNames}
+
+Based on the user's description, suggest:
+1. A folder structure using placeholders like [Show], [Season], [Movie], [Year], [Quality], [Genre], [Artist], [Album]
+2. A naming convention description
+3. Clear reasoning for why this structure fits their request
+
+Consider popular media server requirements (Plex, Jellyfin, Kodi) if mentioned, but prioritize the user's specific preferences.
+
+IMPORTANT: Respond in valid JSON format only:
+{
+  "folder": "suggested folder structure with placeholders",
+  "naming": "naming convention description",
+  "reasoning": "detailed explanation of why this structure matches the user's request"
+}
+
+Examples of good folder structures:
+- Movies: "Movies/[Movie (Year)]/" or "Movies/[Genre]/[Year]/" or "Movies/[Year]/[Movie]/"
+- TV Shows: "TV Shows/[Show]/Season [##]/" or "TV Shows/[Show]/" or "Shows/[Show]/S[##]/"
+- Music: "Music/[Artist]/[Album]/" or "Music/[Genre]/[Artist]/" or "Music/[Artist]/"
+
+Keep placeholders clear and meaningful.`;
+
+    try {
+      console.log(`🤖 Consulting AI for organization pattern...`);
+      
+      // Create a temporary request for AI analysis
+      const tempRequest = {
+        files: files.slice(0, 5).map(name => ({
+          name,
+          path: `/temp/${name}`,
+          extension: name.split('.').pop() || '',
+          size: 0,
+          modified: new Date()
+        })),
+        baseDirectory: '/temp',
+        userPreferences: {
+          intent: description,
+          mediaType: mediaType,
+          attempt: attempt
+        }
+      };
+
+      // Use a simplified AI call for pattern generation
+      const response = await this.callAIForPatternGeneration(prompt);
+      
+      try {
+        const parsed = JSON.parse(response);
+        
+        if (!parsed.folder || !parsed.naming || !parsed.reasoning) {
+          throw new Error('Invalid AI response format');
+        }
+        
+        return {
+          folder: parsed.folder,
+          naming: parsed.naming,
+          reasoning: parsed.reasoning
+        };
+      } catch (parseError) {
+        console.warn('AI returned invalid JSON, using fallback interpretation');
+        return this.interpretDescriptionWithContext(description, mediaType, attempt);
+      }
+      
+    } catch (error) {
+      console.warn('AI API call failed, using fallback interpretation:', error);
+      return this.interpretDescriptionWithContext(description, mediaType, attempt);
+    }
+  }
+
+  private async callAIForPatternGeneration(prompt: string): Promise<string> {
+    if (!this.aiProvider) {
+      throw new Error('AI provider not initialized');
+    }
+
+    // Different providers have different interfaces, so we need to handle them appropriately
+    try {
+      // For OpenAI provider
+      if ((this.aiProvider as any).client) {
+        const openaiProvider = this.aiProvider as any;
+        const completion = await openaiProvider.client.chat.completions.create({
+          model: openaiProvider.model,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert file organization assistant. Always respond with valid JSON only.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          max_tokens: 800,
+          temperature: 0.3
+        });
+
+        return completion.choices[0]?.message?.content || '';
+      }
+      
+      // For Anthropic provider  
+      if ((this.aiProvider as any).anthropic) {
+        const anthropicProvider = this.aiProvider as any;
+        const response = await anthropicProvider.anthropic.messages.create({
+          model: anthropicProvider.model,
+          max_tokens: 800,
+          temperature: 0.3,
+          messages: [
+            {
+              role: 'user',
+              content: `You are an expert file organization assistant. Always respond with valid JSON only.\n\n${prompt}`
+            }
+          ]
+        });
+
+        return response.content[0]?.text || '';
+      }
+      
+      throw new Error('Unsupported AI provider for pattern generation');
+      
+    } catch (error) {
+      console.error('AI provider call failed:', error);
+      throw error;
+    }
+  }
+
+  private async refineAISuggestion(currentSuggestion: { folder: string; naming: string; reasoning: string }, mediaType: string, files: string[], attempt: number): Promise<FileTypeRule> {
+    console.log(`\n🔧 Let's refine the suggestion...`);
+    console.log(`📁 Current structure: ${currentSuggestion.folder}`);
+    console.log(`🏷️  Current naming: ${currentSuggestion.naming}`);
+    
+    const { refinement } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'refinement',
+        message: 'What would you like to change or improve?',
+        default: 'Example: "Add genre folders", "Include quality in filename", "Simpler structure"',
+        validate: input => input.trim().length > 3 || 'Please provide more specific feedback'
+      }
+    ]);
+
+    // Continue the conversation with refinement feedback
+    return await this.conductAIConversation(refinement, mediaType, files, attempt + 1);
+  }
+
+  private async getNewDescription(mediaType: string, files: string[], attempt: number): Promise<FileTypeRule> {
+    console.log(`\n💬 Let's try a different approach...`);
+    
+    const { newDescription } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'newDescription',
+        message: `How would you like your ${mediaType.toLowerCase()} organized? (try explaining it differently)`,
+        validate: input => input.trim().length > 5 || 'Please provide a more detailed description'
+      }
+    ]);
+
+    return await this.conductAIConversation(newDescription, mediaType, files, attempt);
+  }
+
+  private interpretDescriptionWithContext(description: string, mediaType: string, attempt: number): { folder: string; naming: string; reasoning: string } {
+    const lower = description.toLowerCase();
+    
+    // Enhanced interpretation that considers conversation context
+    if (attempt > 1) {
+      // In follow-up attempts, be more creative and try different approaches
+      if (lower.includes('simpler') || lower.includes('less complex')) {
+        return {
+          folder: `${mediaType}/`,
+          naming: 'Clean, simple filenames',
+          reasoning: 'Simplified based on your feedback - flat structure for easy browsing'
+        };
+      }
+      if (lower.includes('genre') || lower.includes('category')) {
+        if (mediaType === 'Movies') {
+          return {
+            folder: 'Movies/[Genre]/[Year]/',
+            naming: 'Genre-first organization with year subfolders',
+            reasoning: 'Added genre organization as requested in refinement'
+          };
+        }
+      }
+    }
+    
+    // First attempt - use the original interpretation logic
+    return this.interpretDescriptionKeywords(description, mediaType);
+  }
+
+  private interpretDescriptionKeywords(description: string, mediaType: string): { folder: string; naming: string; reasoning: string } {
+    const lower = description.toLowerCase();
+    
+    // Check for specific media server mentions
+    if (lower.includes('plex')) {
+      if (mediaType === 'Movies') {
+        return {
+          folder: 'Movies/[Movie (Year)]/',
+          naming: 'Plex-optimized movie names with year',
+          reasoning: 'Plex Media Server prefers each movie in its own folder with year'
+        };
+      } else {
+        return {
+          folder: 'TV Shows/[Show]/Season [##]/',
+          naming: 'Plex-optimized show names with SxxExx format',
+          reasoning: 'Plex Media Server prefers shows organized by season folders'
+        };
+      }
+    }
+    
+    if (lower.includes('jellyfin') || lower.includes('emby')) {
+      const pattern = this.generateUseCasePattern('Jellyfin Media Server', mediaType, []);
+      return { folder: pattern.folder, naming: pattern.naming, reasoning: 'Jellyfin/Emby optimized structure' };
+    }
+    
+    if (lower.includes('kodi') || lower.includes('xbmc')) {
+      const pattern = this.generateUseCasePattern('Kodi/XBMC', mediaType, []);
+      return { folder: pattern.folder, naming: pattern.naming, reasoning: 'Kodi/XBMC optimized structure' };
+    }
+    
+    // Check for detail preferences
+    if (lower.includes('more details') || lower.includes('detailed') || lower.includes('information')) {
+      if (mediaType === 'Movies') {
+        return {
+          folder: 'Movies/[Year]/[Genre]/',
+          naming: 'Detailed movie names with year, genre, and quality',
+          reasoning: 'Added year and genre folders for more detailed organization'
+        };
+      } else {
+        return {
+          folder: 'TV Shows/[Show]/Season [##]/',
+          naming: 'Detailed show names with season, episode, and quality info',
+          reasoning: 'Enhanced naming with more detailed episode information'
+        };
+      }
+    }
+    
+    // Check for simple preferences
+    if (lower.includes('simple') || lower.includes('basic') || lower.includes('minimal')) {
+      return {
+        folder: `${mediaType}/`,
+        naming: 'Simple, clean filenames',
+        reasoning: 'Simplified structure with minimal folder nesting'
+      };
+    }
+    
+    // Check for year-based organization
+    if (lower.includes('year') || lower.includes('decade')) {
+      if (mediaType === 'Movies') {
+        return {
+          folder: 'Movies/[Year]/',
+          naming: 'Movies organized by release year',
+          reasoning: 'Year-based organization as requested'
+        };
+      }
+    }
+    
+    // Check for genre organization
+    if (lower.includes('genre') || lower.includes('category')) {
+      if (mediaType === 'Movies') {
+        return {
+          folder: 'Movies/[Genre]/',
+          naming: 'Movies organized by genre',
+          reasoning: 'Genre-based organization as requested'
+        };
+      }
+    }
+    
+    // Default fallback based on media type
+    const fallback = this.generateFallbackPattern(description, mediaType);
+    return { folder: fallback.folder, naming: fallback.naming, reasoning: 'General organization structure' };
+  }
+
+  private generateUseCasePattern(useCase: string, mediaType: string, files: string[]): FileTypeRule {
+    if (useCase.includes('Plex')) {
+      if (mediaType === 'Movies') {
+        return {
+          type: 'Movies',
+          pattern: 'plex_movies',
+          folder: 'Movies/[Movie (Year)]/',
+          naming: 'Plex-optimized: Movie Title (Year) [Quality]',
+          examples: [
+            'Movies/The Matrix (1999)/The Matrix (1999) [1080p].mkv',
+            'Movies/Avengers Endgame (2019)/Avengers Endgame (2019) [4K].mkv'
+          ]
+        };
+      } else {
+        return {
+          type: 'TV Shows',
+          pattern: 'plex_tv',
+          folder: 'TV Shows/[Show]/Season [##]/',
+          naming: 'Plex-optimized: Show SxxExx format',
+          examples: [
+            'TV Shows/Breaking Bad/Season 01/Breaking Bad S01E01.mkv',
+            'TV Shows/Game of Thrones/Season 01/Game of Thrones S01E01.mkv'
+          ]
+        };
+      }
+    } else if (useCase.includes('Simple')) {
+      return {
+        type: mediaType,
+        pattern: 'simple',
+        folder: `${mediaType}/`,
+        naming: 'Simple, clean filenames',
+        examples: files.slice(0, 2).map(name => `${mediaType}/${name}`)
+      };
+    }
+    // Add more use cases as needed
+    return this.generateFallbackPattern('general organized collection', mediaType);
+  }
+
+  private generateFallbackPattern(description: string, mediaType: string): FileTypeRule {
+    // Simple fallback based on media type
+    if (mediaType === 'Movies') {
+      return {
+        type: 'Movies',
+        pattern: 'fallback',
+        folder: 'Movies/[Movie (Year)]/',
+        naming: 'Clean movie names with year',
+        examples: ['Movies/Example Movie (2023)/Example Movie (2023).mkv']
+      };
+    } else {
+      return {
+        type: 'TV Shows',
+        pattern: 'fallback',
+        folder: 'TV Shows/[Show]/Season [##]/',
+        naming: 'Clean show names with season/episode',
+        examples: ['TV Shows/Example Show/Season 01/Example Show S01E01.mkv']
+      };
+    }
+  }
+
+  private generateExamplesFromPattern(folder: string, naming: string, mediaType: string, files: string[]): string[] {
+    // Simple example generation - could be enhanced
+    const sampleFiles = files.slice(0, 2);
+    if (mediaType === 'Movies') {
+      return [
+        folder.replace('[Movie (Year)]', 'The Matrix (1999)') + 'The Matrix (1999) [1080p].mkv',
+        folder.replace('[Movie (Year)]', 'Inception (2010)') + 'Inception (2010) [1080p].mkv'
+      ];
+    } else {
+      return [
+        folder.replace('[Show]', 'Breaking Bad').replace('[##]', '01') + 'Breaking Bad S01E01.mkv',
+        folder.replace('[Show]', 'Game of Thrones').replace('[##]', '01') + 'Game of Thrones S01E01.mkv'
+      ];
+    }
   }
 
   private async generateIntelligentQuestions(analysis: DirectoryAnalysis): Promise<string[]> {

@@ -55,14 +55,15 @@ organ-ai-zer interactive <directory> [options]
 ```
 
 ### Options
-- `-r, --recursive`: Include subdirectories
 - `-d, --dry-run`: Simulate organization without moving files
 - `-c, --config <path>`: Use custom configuration file
+
+**Note:** Interactive mode always includes subdirectories automatically for comprehensive analysis.
 
 ### Examples
 ```bash
 # Organize media library interactively
-organ-ai-zer interactive ~/Media --recursive
+organ-ai-zer interactive ~/Media
 
 # Dry run for testing
 organ-ai-zer interactive ~/Downloads --dry-run

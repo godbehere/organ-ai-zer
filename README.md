@@ -62,7 +62,7 @@ npm install -g .
 For complex organization needs, use the advanced conversational AI feature with intelligent 3-phase architecture:
 
 ```bash
-organ-ai-zer interactive ~/Media --recursive
+organ-ai-zer interactive ~/Media
 ```
 
 **Phase 1: AI Analysis** - Intelligently detects projects, analyzes file content, and identifies patterns
@@ -248,14 +248,13 @@ organ-ai-zer interactive <directory> [options]
 ```
 
 **Options:**
-- `-r, --recursive`: Include subdirectories
 - `-d, --dry-run`: Simulate organization without moving files
 - `-c, --config <path>`: Custom config file path
 
 **Example:**
 ```bash
 # Interactive media library organization
-organ-ai-zer interactive ~/Media --recursive
+organ-ai-zer interactive ~/Media
 
 # Test with dry run first
 organ-ai-zer interactive ~/Downloads --dry-run
