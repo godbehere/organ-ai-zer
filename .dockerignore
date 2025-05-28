@@ -1,0 +1,54 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs (will be built in container)
+dist/
+
+# Development files
+.git/
+.gitignore
+*.md
+docs/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files and data
+test-data/
+test-files/
+*.test.js
+*.spec.js
+
+# Configuration files with secrets
+.env
+.env.*
+config.json
+**/config.json
+
+# Cache and temporary files
+.cache/
+.tmp/
+*.log
+
+# Documentation (not needed in container)
+README.md
+CONFIGURATION.md
+EXAMPLES.md
+INTERACTIVE_ORGANIZE.md
+EXAMPLES_INTERACTIVE.md
+CACHING.md
+
+# Docker files (avoid recursion)
+Dockerfile
+docker-compose*.yml
+.dockerignore

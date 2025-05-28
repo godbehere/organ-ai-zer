@@ -352,6 +352,28 @@ If AI analysis fails:
 2. Uses file extensions and basic patterns
 3. Maintains functionality without AI dependency
 
+## Docker Testing Environment
+
+For safe testing without affecting your local files, use the Docker setup:
+
+```bash
+# Quick start - build and run interactive container
+./docker/test-runner.sh build
+./docker/test-runner.sh interactive
+
+# Inside container - test various scenarios
+organ-ai-zer preview /test-data/scenarios/messy-downloads
+organ-ai-zer interactive /test-data/scenarios/media-library --dry-run
+```
+
+The Docker environment includes:
+- 🗂️ **5 realistic test scenarios** (downloads, media, photos, work, desktop)
+- 🔒 **Safe isolated environment** - no risk to your local files  
+- ⚙️ **Pre-configured setup** - ready to test immediately
+- 📊 **Comprehensive test data** - movies, music, photos, documents, code
+
+See [DOCKER_TESTING.md](DOCKER_TESTING.md) for detailed setup and usage instructions.
+
 ## Troubleshooting
 
 ### Common Issues
