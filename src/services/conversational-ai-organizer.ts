@@ -10,12 +10,21 @@ interface DirectoryAnalysis {
   fileTypes: Record<string, number>;
   directoryStructure: string[];
   sampleFiles: Record<string, string[]>;
-  potentialProjects: string[];
+  detectedProjects: ProjectInfo[];
   mediaPatterns: {
     tvShows: string[];
     movies: string[];
     musicArtists: string[];
   };
+}
+
+interface ProjectInfo {
+  path: string;
+  name: string;
+  type: string; // 'web', 'python', 'node', 'rust', 'java', 'generic', etc.
+  confidence: number;
+  indicators: string[]; // What made us think this is a project
+  files: string[]; // All files belonging to this project
 }
 
 interface FileTypeRule {
@@ -71,7 +80,6 @@ export class ConversationalAIOrganizer {
       // Analyze file types and patterns
       const fileTypes: Record<string, number> = {};
       const sampleFiles: Record<string, string[]> = {};
-      const potentialProjects: string[] = [];
       const mediaPatterns = {
         tvShows: [] as string[],
         movies: [] as string[],
@@ -87,12 +95,15 @@ export class ConversationalAIOrganizer {
           sampleFiles[category].push(file.name);
         }
 
-        // Detect patterns
-        this.detectPatterns(file, potentialProjects, mediaPatterns);
+        // Detect media patterns
+        this.detectMediaPatterns(file, mediaPatterns);
       });
 
       // Get directory structure
       const directoryStructure = this.extractDirectoryStructure(files);
+
+      // Detect projects using hybrid AI + pattern approach
+      const detectedProjects = await this.detectProjects(files, directoryStructure);
 
       spinner.succeed(`Found ${files.length} files in ${directoryStructure.length} directories`);
 
@@ -101,7 +112,7 @@ export class ConversationalAIOrganizer {
         fileTypes,
         directoryStructure,
         sampleFiles,
-        potentialProjects,
+        detectedProjects,
         mediaPatterns
       };
     } catch (error) {
@@ -110,18 +121,11 @@ export class ConversationalAIOrganizer {
     }
   }
 
-  private detectPatterns(
+  private detectMediaPatterns(
     file: FileInfo, 
-    potentialProjects: string[], 
     mediaPatterns: DirectoryAnalysis['mediaPatterns']
   ): void {
     const fileName = file.name.toLowerCase();
-    
-    // Project detection
-    if (fileName.includes('package.json') || fileName.includes('requirements.txt') || 
-        fileName.includes('cargo.toml') || fileName.includes('pom.xml')) {
-      potentialProjects.push(file.path);
-    }
 
     // TV show detection
     if (fileName.match(/s\d+e\d+/) || fileName.match(/season\s+\d+/)) {
@@ -146,6 +150,210 @@ export class ConversationalAIOrganizer {
         mediaPatterns.musicArtists.push(artist);
       }
     }
+  }
+
+  private async detectProjects(files: FileInfo[], directories: string[]): Promise<ProjectInfo[]> {
+    if (!this.aiProvider) {
+      // Fallback to pattern-based detection only
+      return this.detectProjectsByPatterns(files, directories);
+    }
+
+    try {
+      // Use AI to analyze directory structures for projects
+      const aiDetectedProjects = await this.detectProjectsWithAI(files, directories);
+      
+      // Supplement with pattern-based detection
+      const patternDetectedProjects = this.detectProjectsByPatterns(files, directories);
+      
+      // Merge and deduplicate results
+      return this.mergeProjectDetections(aiDetectedProjects, patternDetectedProjects);
+      
+    } catch (error) {
+      console.warn('AI project detection failed, using pattern-based detection');
+      return this.detectProjectsByPatterns(files, directories);
+    }
+  }
+
+  private async detectProjectsWithAI(files: FileInfo[], directories: string[]): Promise<ProjectInfo[]> {
+    if (!this.aiProvider) {
+      return [];
+    }
+
+    // Group files by directory for AI analysis
+    const directoriesWithFiles: Record<string, string[]> = {};
+    files.forEach(file => {
+      const dir = file.path.replace('/' + file.name, '') || '.';
+      if (!directoriesWithFiles[dir]) {
+        directoriesWithFiles[dir] = [];
+      }
+      directoriesWithFiles[dir].push(file.name);
+    });
+
+    const prompt = `You are an intelligent project detector. Analyze these directory structures and identify which directories contain software/development projects that should be kept intact.
+
+DIRECTORIES TO ANALYZE:
+${Object.entries(directoriesWithFiles).map(([dir, fileList]) => 
+  `${dir}/\n  Files: ${fileList.slice(0, 10).join(', ')}${fileList.length > 10 ? ` (and ${fileList.length - 10} more)` : ''}`
+).join('\n\n')}
+
+For each directory, determine:
+1. Is this a software/development project that should be kept as a unit?
+2. What type of project is it? (web, mobile, python, node, rust, java, documentation, etc.)
+3. How confident are you? (0.0 to 1.0)
+4. What specific indicators made you think this is a project?
+
+Look for indicators like:
+- Configuration files (package.json, requirements.txt, Cargo.toml, pom.xml, etc.)
+- Source code organization (src/, lib/, tests/, docs/)
+- Build files (Makefile, Dockerfile, build scripts)
+- Documentation (README files, docs/)
+- Version control indicators (.gitignore, etc.)
+- Dependency management files
+- Project structure patterns
+
+Return a JSON object:
+{
+  "detectedProjects": [
+    {
+      "path": "my-web-app",
+      "name": "my-web-app",
+      "type": "web",
+      "confidence": 0.95,
+      "indicators": ["package.json", "src/ directory", "README.md", "organized file structure"],
+      "reasoning": "Contains package.json, has src/ directory structure, includes README documentation"
+    }
+  ]
+}
+
+Only identify directories that are clearly organized development projects. Don't flag random collections of files.`;
+
+    try {
+      const request = {
+        files: files.slice(0, 50), // Limit for AI processing
+        baseDirectory: directories[0] || '.',
+        userPreferences: { 
+          intent: 'detect_projects',
+          directoryAnalysis: { directories: Object.keys(directoriesWithFiles) }
+        }
+      };
+
+      const response = await this.aiProvider.analyzeFiles(request);
+      return this.parseAIProjectResponse(response, directoriesWithFiles);
+
+    } catch (error) {
+      console.warn('AI project detection request failed:', error);
+      return [];
+    }
+  }
+
+  private parseAIProjectResponse(response: any, directoriesWithFiles: Record<string, string[]>): ProjectInfo[] {
+    try {
+      const responseText = response.reasoning || '';
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        if (parsed.detectedProjects) {
+          return parsed.detectedProjects.map((project: any) => ({
+            path: project.path,
+            name: project.name || project.path.split('/').pop() || 'Unknown Project',
+            type: project.type || 'generic',
+            confidence: Math.min(Math.max(project.confidence || 0.5, 0), 1),
+            indicators: project.indicators || [],
+            files: directoriesWithFiles[project.path] || []
+          }));
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to parse AI project response');
+    }
+    
+    return [];
+  }
+
+  private detectProjectsByPatterns(files: FileInfo[], directories: string[]): ProjectInfo[] {
+    const projects: ProjectInfo[] = [];
+    const projectIndicators = new Map<string, { type: string; indicators: string[]; confidence: number }>();
+
+    // Known project file patterns
+    const patterns = [
+      { files: ['package.json'], type: 'node', confidence: 0.9 },
+      { files: ['requirements.txt', 'setup.py', 'pyproject.toml'], type: 'python', confidence: 0.9 },
+      { files: ['Cargo.toml'], type: 'rust', confidence: 0.9 },
+      { files: ['pom.xml'], type: 'java', confidence: 0.9 },
+      { files: ['composer.json'], type: 'php', confidence: 0.9 },
+      { files: ['Gemfile'], type: 'ruby', confidence: 0.9 },
+      { files: ['go.mod'], type: 'go', confidence: 0.9 },
+      { files: ['Makefile'], type: 'c/cpp', confidence: 0.7 },
+      { files: ['Dockerfile'], type: 'containerized', confidence: 0.8 },
+      { files: ['.gitignore', 'README.md'], type: 'generic', confidence: 0.6 }
+    ];
+
+    files.forEach(file => {
+      const dir = file.path.replace('/' + file.name, '') || '.';
+      const fileName = file.name.toLowerCase();
+      
+      patterns.forEach(pattern => {
+        if (pattern.files.some(patternFile => fileName.includes(patternFile.toLowerCase()))) {
+          if (!projectIndicators.has(dir)) {
+            projectIndicators.set(dir, { type: pattern.type, indicators: [], confidence: 0 });
+          }
+          
+          const project = projectIndicators.get(dir)!;
+          project.indicators.push(file.name);
+          project.confidence = Math.max(project.confidence, pattern.confidence);
+          
+          // Higher confidence for multiple indicators
+          if (project.indicators.length > 1) {
+            project.confidence = Math.min(project.confidence + 0.1, 1.0);
+          }
+        }
+      });
+    });
+
+    // Convert to ProjectInfo array
+    projectIndicators.forEach((info, path) => {
+      if (info.confidence >= 0.6) { // Only include confident detections
+        const projectFiles = files
+          .filter(file => file.path.startsWith(path))
+          .map(file => file.name);
+          
+        projects.push({
+          path,
+          name: path.split('/').pop() || 'Unknown Project',
+          type: info.type,
+          confidence: info.confidence,
+          indicators: info.indicators,
+          files: projectFiles
+        });
+      }
+    });
+
+    return projects;
+  }
+
+  private mergeProjectDetections(aiProjects: ProjectInfo[], patternProjects: ProjectInfo[]): ProjectInfo[] {
+    const merged = new Map<string, ProjectInfo>();
+    
+    // Add AI-detected projects first (higher priority)
+    aiProjects.forEach(project => {
+      merged.set(project.path, project);
+    });
+    
+    // Add pattern-detected projects if not already detected by AI
+    patternProjects.forEach(project => {
+      if (!merged.has(project.path)) {
+        merged.set(project.path, project);
+      } else {
+        // Merge indicators from pattern detection
+        const existing = merged.get(project.path)!;
+        existing.indicators = [...new Set([...existing.indicators, ...project.indicators])];
+        existing.confidence = Math.max(existing.confidence, project.confidence);
+      }
+    });
+    
+    return Array.from(merged.values());
   }
 
   private extractShowName(fileName: string): string | null {
@@ -222,8 +430,12 @@ export class ConversationalAIOrganizer {
       console.log(`🎵 Music artists detected: ${analysis.mediaPatterns.musicArtists.slice(0, 3).join(', ')}`);
     }
 
-    if (analysis.potentialProjects.length > 0) {
-      console.log(`💻 Code projects detected: ${analysis.potentialProjects.length} projects`);
+    if (analysis.detectedProjects.length > 0) {
+      console.log(`💻 Code projects detected:`);
+      analysis.detectedProjects.forEach(project => {
+        console.log(`   ${project.name} (${project.type}) - confidence: ${(project.confidence * 100).toFixed(0)}%`);
+        console.log(`     Indicators: ${project.indicators.join(', ')}`);
+      });
     }
   }
 
@@ -304,7 +516,7 @@ ${allFiles.map((f, i) => `${i + 1}. ${f.fileName}`).join('\n')}
 DIRECTORY CONTEXT:
 - Total files: ${analysis.totalFiles}
 - Directory structure: ${analysis.directoryStructure.join(', ')}
-- Potential projects detected: ${analysis.potentialProjects.length}
+- Detected projects: ${analysis.detectedProjects.length}
 
 Your task:
 1. Analyze each filename for content patterns, not just extensions
@@ -409,7 +621,7 @@ Be thorough and intelligent in your analysis. The user wants to see categories t
       fileTypes: {},
       totalFiles: 0,
       directoryStructure: [],
-      potentialProjects: []
+      detectedProjects: []
     });
   }
 
@@ -979,8 +1191,8 @@ Be thorough and intelligent in your analysis. The user wants to see categories t
   }
 
   private generateStructuralQuestion(analysis: DirectoryAnalysis): string | null {
-    if (analysis.potentialProjects.length > 0) {
-      return `I detected ${analysis.potentialProjects.length} code projects in your files. Do you want to keep these projects intact and organized separately, or integrate them into a broader organization structure?`;
+    if (analysis.detectedProjects.length > 0) {
+      return `I detected ${analysis.detectedProjects.length} code projects in your files. Do you want to keep these projects intact and organized separately, or integrate them into a broader organization structure?`;
     }
     
     if (analysis.directoryStructure.length > 10) {
@@ -1076,7 +1288,7 @@ Be thorough and intelligent in your analysis. The user wants to see categories t
 
       // Apply rules to each file
       for (const file of files) {
-        const suggestion = await this.applyRulesToFile(file, targetDirectory, strategy);
+        const suggestion = await this.applyRulesToFile(file, targetDirectory, strategy, analysis.detectedProjects);
         
         // Only ask for clarification if we're genuinely uncertain
         if (suggestion.confidence < strategy.uncertaintyThreshold) {
@@ -1104,16 +1316,38 @@ Be thorough and intelligent in your analysis. The user wants to see categories t
   private async applyRulesToFile(
     file: FileInfo,
     targetDirectory: string,
-    strategy: OrganizationStrategy
+    strategy: OrganizationStrategy,
+    detectedProjects: ProjectInfo[] = []
   ): Promise<OrganizationSuggestion> {
-    // Use intelligent content classification instead of just file extension
+    // Check if this file belongs to a detected project
+    const belongsToProject = detectedProjects.find(project => 
+      file.path.startsWith(project.path + '/') || file.path === project.path + '/' + file.name
+    );
+    
+    if (belongsToProject) {
+      // Preserve project structure - move entire project as a unit
+      const relativePath = file.path.replace(belongsToProject.path + '/', '');
+      const projectRule = strategy.fileTypeRules['Code Projects'];
+      
+      if (projectRule) {
+        const suggestedPath = `${targetDirectory}/Projects/${belongsToProject.name}/${relativePath}`;
+        return {
+          file,
+          suggestedPath,
+          reason: `Part of ${belongsToProject.name} project - preserving structure`,
+          confidence: 1.0
+        };
+      }
+    }
+
+    // Use intelligent content classification for non-project files
     const contentType = this.intelligentlyClassifyFile(file.name, { 
       mediaPatterns: { tvShows: [], movies: [], musicArtists: [] },
       fileTypes: {},
       sampleFiles: {},
       totalFiles: 0,
       directoryStructure: [],
-      potentialProjects: []
+      detectedProjects: []
     });
     
     const rule = strategy.fileTypeRules[contentType];
