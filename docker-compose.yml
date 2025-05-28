@@ -22,7 +22,6 @@ services:
     environment:
       - NODE_ENV=development
       - TERM=xterm-256color
-    
     # Interactive mode
     stdin_open: true
     tty: true

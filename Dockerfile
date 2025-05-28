@@ -1,14 +1,7 @@
-# Use Node.js LTS version
-FROM node:18-alpine
+# Use Node.js LTS version with full OS (more reliable than alpine)
+FROM node:20
 
-# Install required system dependencies
-RUN apk add --no-cache \
-    bash \
-    curl \
-    git \
-    python3 \
-    make \
-    g++
+# System already has bash, curl, git - no additional packages needed
 
 # Set working directory
 WORKDIR /app
@@ -17,14 +10,11 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci
+# Install only production dependencies
+RUN npm install
 
-# Copy source code
-COPY src/ ./src/
-
-# Build the application
-RUN npm run build
+# Copy pre-built application
+COPY dist/ ./dist/
 
 # Create test environment structure
 RUN mkdir -p /test-data

@@ -4,8 +4,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build outputs (will be built in container)
-dist/
+# Build outputs now copied from host
+# dist/ - removed to allow copying pre-built dist folder
 
 # Development files
 .git/

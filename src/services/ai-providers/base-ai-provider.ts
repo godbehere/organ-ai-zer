@@ -17,6 +17,10 @@ export interface AIAnalysisResponse {
     metadata?: any;
   }>;
   reasoning: string;
+  clarificationNeeded?: {
+    questions: string[];
+    reason: string;
+  };
 }
 
 export abstract class BaseAIProvider {
@@ -55,8 +59,8 @@ export abstract class BaseAIProvider {
 
 **Base Directory:** ${baseDirectory}
 
-**Files to organize:**
-${files.map(file => `- ${file.name} (${file.extension}, ${this.formatFileSize(file.size)}, modified: ${file.modified.toISOString().split('T')[0]})`).join('\n')}
+**Files to organize (TOTAL COUNT: ${files.length}):**
+${files.map((file, index) => `${index + 1}. ${file.name} (${file.extension}, ${this.formatFileSize(file.size)}, modified: ${file.modified.toISOString().split('T')[0]})`).join('\n')}
 
 **Existing Directory Structure:**
 ${existingStructure?.length ? existingStructure.join('\n') : 'No existing structure provided'}
@@ -70,7 +74,13 @@ ${userPreferences ? JSON.stringify(userPreferences, null, 2) : 'No specific pref
 3. Suggest logical organization paths that group related files
 4. Provide clear reasoning for each suggestion
 5. Assign confidence scores (0.0 to 1.0) based on how certain you are about each suggestion
-6. Consider common file organization patterns (by date, type, project, category)
+6. Apply the same recognition patterns and consistency rules as described above
+7. **ABSOLUTELY CRITICAL: Your response MUST include a suggestion for EVERY single file listed above**
+8. **COUNT CHECK: Input has ${files.length} files, your suggestions array must have exactly ${files.length} items**
+9. **Go through each numbered file 1-${files.length} and provide a suggestion for each one**
+10. **Recognize file patterns and group related files/projects together**
+11. **Use consistent naming and folder structures for files of the same type**
+12. **Example: If you organize one Breaking Bad episode as Shows/Breaking Bad/Season 1/, ALL Breaking Bad episodes must follow this exact pattern**
 
 **Response Format:**
 Return a JSON object with the following structure:
@@ -84,10 +94,19 @@ Return a JSON object with the following structure:
       "category": "photos"
     }
   ],
-  "reasoning": "Overall explanation of the organization strategy used"
+  "reasoning": "Overall explanation of the organization strategy used",
+  "clarificationNeeded": {
+    "questions": ["How would you prefer to organize photos by date?"],
+    "reason": "Need clarification for consistent organization"
+  }
 }
 
-Important: Only return valid JSON. Do not include any explanatory text outside the JSON.`;
+**CLARIFICATION GUIDELINES:**
+- Only include "clarificationNeeded" if you genuinely cannot provide good suggestions without more information
+- If file patterns are clear (S01E01 = TV show, (2019) = movie year), proceed with suggestions
+- Ask clarification ONLY for truly ambiguous organizational choices
+
+Important: Only return valid JSON. Maintain consistency across similar file types.`;
   }
 
   protected buildConversationalPrompt(request: AIAnalysisRequest): string {
@@ -108,9 +127,8 @@ ${userPreferences.rejectedPatterns?.length > 0 ?
 **Approved Organization Patterns:**
 ${userPreferences.approvedPatterns?.length > 0 ? userPreferences.approvedPatterns.join('\n') : 'No approved patterns yet.'}
 
-**Files to Organize:**
-${files.slice(0, 20).map(file => `- ${file.name} (${file.extension}, ${this.formatFileSize(file.size)}, modified: ${file.modified.toISOString().split('T')[0]})`).join('\n')}
-${files.length > 20 ? `... and ${files.length - 20} more files` : ''}
+**Files to Organize (TOTAL COUNT: ${files.length}):**
+${files.map((file, index) => `${index + 1}. ${file.name} (${file.extension}, ${this.formatFileSize(file.size)}, modified: ${file.modified.toISOString().split('T')[0]})`).join('\n')}
 
 **Base Directory:** ${baseDirectory}
 
@@ -119,9 +137,52 @@ ${files.length > 20 ? `... and ${files.length - 20} more files` : ''}
 2. Create an organization structure that matches their specific requirements
 3. Pay special attention to rejected patterns and avoid similar approaches
 4. Incorporate any approved patterns into your suggestions
-5. For media files, consider series/seasons, genres, years, quality, etc. as mentioned by the user
-6. Be consistent with naming conventions and folder structures
-7. Group related files together logically
+5. **CONSISTENCY IS CRITICAL**: Use the SAME naming pattern and folder structure for files of the same type/category
+
+**FILE TYPE RECOGNITION PATTERNS:**
+
+**Media Files:**
+- TV Shows: Look for patterns like "S01E01", "Season 1 Episode 1", "s4e1", "S04E02", etc.
+- Common show abbreviations: "GOT" = Game of Thrones, "BB" = Breaking Bad, etc.
+- Movies: Look for years in parentheses like "(2019)", "1994", quality indicators like "1080p", "4k", "HDR"
+- Music: Artist names, album names, track numbers, audio formats like ".mp3", ".wav", ".flac"
+
+**Code Projects:**
+- Look for: package.json, requirements.txt, Cargo.toml, pom.xml, .git folders, src/ directories
+- Common patterns: project-name/src/, project-name/tests/, README files
+- Languages: .js/.ts (Node.js), .py (Python), .rs (Rust), .java, .cpp, .go, etc.
+
+**Documents:**
+- Office docs: .docx, .xlsx, .pptx - group by project/topic
+- PDFs: Look for series, manuals, reports - group related documents
+- Text files: README, notes, documentation - keep with related projects
+
+**Archives & Packages:**
+- .zip, .tar.gz, .rar files and their extracted contents
+- Application bundles (.app, .exe installers)
+- Game installations and mods
+
+**PROJECT GROUPING RULES:**
+- **CRITICAL**: Identify files that belong to the same project/collection and move them together
+- Look for common prefixes, timestamps, or directory structures that indicate related files
+- Maintain existing folder structures for code projects (don't break src/, tests/, docs/ hierarchies)
+- Group related documents (presentation + supporting files, photo albums, etc.)
+- When moving projects, preserve internal structure but place in appropriate top-level category
+
+**CRITICAL SUCCESS CRITERIA:**
+- **YOUR RESPONSE MUST CONTAIN EXACTLY ${files.length} SUGGESTIONS**
+- **COUNT YOUR SUGGESTIONS BEFORE RESPONDING - MUST EQUAL ${files.length}**
+- **NEVER skip a file - every file in the numbered list above needs a suggestion**
+
+**CONSISTENCY REQUIREMENTS:**
+- Apply the SAME organization pattern to ALL files of the same type
+- Use consistent naming conventions (underscores vs spaces, date formats, etc.)
+- **If Breaking.Bad.S01E01 goes to Shows/Breaking Bad/Season 1/, then Breaking.Bad.S01E02 and Breaking.Bad.S02E01 MUST follow the exact same pattern**
+- **If GOT_S01E02 is Game of Thrones Season 1 Episode 2, organize it exactly like other TV shows with consistent naming**
+- **Group related documents together (Budget_2024_Q1.xlsx + Budget_2024_Q1_Summary.pdf should go to same location)**
+- **Use consistent season formatting (either "Season 1" or "Season 01" for ALL shows, not mixed)**
+
+**If you need clarification to provide better suggestions, include a "clarificationNeeded" field in your response with specific questions.**
 
 **Response Format:**
 Return a JSON object with the following structure:
@@ -135,10 +196,22 @@ Return a JSON object with the following structure:
       "category": "movies"
     }
   ],
-  "reasoning": "Overall explanation of the organization strategy based on user intent"
+  "reasoning": "Overall explanation of the organization strategy based on user intent",
+  "clarificationNeeded": {
+    "questions": [
+      "Should TV episodes include episode numbers in the filename?",
+      "Do you prefer movie titles with underscores or spaces?"
+    ],
+    "reason": "Need clarification to ensure consistent organization across all files"
+  }
 }
 
-Important: Only return valid JSON. Consider the user's specific requirements and conversation history.`;
+**CLARIFICATION GUIDELINES:**
+- Only include "clarificationNeeded" if you genuinely cannot provide good suggestions without more information
+- If file patterns are clear (S01E01 = TV show, (2019) = movie year), proceed with suggestions
+- Ask clarification ONLY for truly ambiguous organizational choices
+
+Important: Only return valid JSON. Maintain consistency across similar file types.`;
   }
 
   private formatFileSize(bytes: number): string {
@@ -210,7 +283,8 @@ Important: Only return valid JSON. Consider the user's specific requirements and
           category: s.category,
           metadata: s.metadata
         })),
-        reasoning: parsed.reasoning || 'No reasoning provided'
+        reasoning: parsed.reasoning || 'No reasoning provided',
+        clarificationNeeded: parsed.clarificationNeeded
       };
     } catch (error) {
       throw new Error(`Failed to parse AI response: ${error}. Response: ${response.substring(0, 500)}...`);

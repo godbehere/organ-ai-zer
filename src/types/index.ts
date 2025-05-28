@@ -12,6 +12,8 @@ export interface OrganizationSuggestion {
   suggestedPath: string;
   reason: string;
   confidence: number;
+  category?: string;
+  metadata?: any;
 }
 
 export interface OrganizeOptions {

@@ -118,24 +118,34 @@ echo "💼 Creating work projects scenario..."
 # Work Projects - Code, documents, designs
 WORK="$SCENARIOS_DIR/work-projects"
 
-# Client projects
+# Client projects (should be kept together)
 create_fake_file "$WORK/acme_corp_website/index.html" 8192
 create_fake_file "$WORK/acme_corp_website/style.css" 4096
 create_fake_file "$WORK/acme_corp_website/app.js" 16384
+create_fake_file "$WORK/acme_corp_website/package.json" 1024
+create_fake_file "$WORK/acme_corp_website/README.md" 2048
 create_fake_file "$WORK/client_logo_design_final.ai" 2097152
 create_fake_file "$WORK/client_branding_guidelines.pdf" 1048576
 create_fake_file "$WORK/techstart_mobile_app.sketch" 5242880
 create_fake_file "$WORK/startup_pitch_deck.pptx" 10485760
 
-# Personal projects
+# Personal projects (project grouping examples)
 create_fake_file "$WORK/my_python_tool.py" 4096
 create_fake_file "$WORK/learning_react/package.json" 1024
 create_fake_file "$WORK/learning_react/src/App.js" 2048
+create_fake_file "$WORK/learning_react/src/components/Header.js" 1024
+create_fake_file "$WORK/learning_react/README.md" 1536
 create_fake_file "$WORK/data_analysis_script.R" 8192
 create_fake_file "$WORK/portfolio_website/index.html" 4096
+create_fake_file "$WORK/portfolio_website/style.css" 2048
 create_fake_file "$WORK/side_project_ideas.txt" 2048
 
-# Documents
+# Related document groups
+create_fake_file "$WORK/Budget_2024_Q1.xlsx" 262144
+create_fake_file "$WORK/Budget_2024_Q1_Summary.pdf" 131072
+create_fake_file "$WORK/Budget_2024_Q1_Notes.txt" 1024
+create_fake_file "$WORK/Project_Plan_v2.docx" 65536
+create_fake_file "$WORK/Project_Plan_v2_Timeline.xlsx" 32768
 create_fake_file "$WORK/invoice_march_2024.pdf" 131072
 create_fake_file "$WORK/contract_freelance_work.pdf" 524288
 create_fake_file "$WORK/meeting_notes_client_call.docx" 65536
