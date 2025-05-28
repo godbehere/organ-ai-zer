@@ -78,9 +78,9 @@ ${userPreferences ? JSON.stringify(userPreferences, null, 2) : 'No specific pref
 7. **ABSOLUTELY CRITICAL: Your response MUST include a suggestion for EVERY single file listed above**
 8. **COUNT CHECK: Input has ${files.length} files, your suggestions array must have exactly ${files.length} items**
 9. **Go through each numbered file 1-${files.length} and provide a suggestion for each one**
-10. **Recognize file patterns and group related files/projects together**
-11. **Use consistent naming and folder structures for files of the same type**
-12. **Example: If you organize one Breaking Bad episode as Shows/Breaking Bad/Season 1/, ALL Breaking Bad episodes must follow this exact pattern**
+10. **CONSISTENCY CHECK: Review your suggestions to ensure identical patterns within each file type**
+11. **NAMING CHECK: Ensure file names are properly formatted and official names are used**
+12. **Example consistency: If first TV show uses Shows/SeriesName/Season 01/, ALL TV shows must use this exact format**
 
 **Response Format:**
 Return a JSON object with the following structure:
@@ -138,6 +138,8 @@ ${files.map((file, index) => `${index + 1}. ${file.name} (${file.extension}, ${t
 3. Pay special attention to rejected patterns and avoid similar approaches
 4. Incorporate any approved patterns into your suggestions
 5. **CONSISTENCY IS CRITICAL**: Use the SAME naming pattern and folder structure for files of the same type/category
+6. **ACCURATE NAMING**: Expand abbreviations to proper names (GOT → Game of Thrones) but preserve official acronyms (S.H.I.E.L.D.)
+7. **CLEAN FORMATTING**: Fix underscores, capitalization, and formatting for readable file names
 
 **FILE TYPE RECOGNITION PATTERNS:**
 
@@ -175,12 +177,23 @@ ${files.map((file, index) => `${index + 1}. ${file.name} (${file.extension}, ${t
 - **NEVER skip a file - every file in the numbered list above needs a suggestion**
 
 **CONSISTENCY REQUIREMENTS:**
-- Apply the SAME organization pattern to ALL files of the same type
-- Use consistent naming conventions (underscores vs spaces, date formats, etc.)
-- **If Breaking.Bad.S01E01 goes to Shows/Breaking Bad/Season 1/, then Breaking.Bad.S01E02 and Breaking.Bad.S02E01 MUST follow the exact same pattern**
-- **If GOT_S01E02 is Game of Thrones Season 1 Episode 2, organize it exactly like other TV shows with consistent naming**
-- **Group related documents together (Budget_2024_Q1.xlsx + Budget_2024_Q1_Summary.pdf should go to same location)**
-- **Use consistent season formatting (either "Season 1" or "Season 01" for ALL shows, not mixed)**
+
+**PATTERN CONSISTENCY:**
+- Choose ONE organization pattern for each file type and apply it to ALL files of that type
+- If you organize one TV show as Shows/SeriesName/Season X/, then ALL TV shows must follow this exact structure
+- If you organize one movie with a specific naming format, ALL movies must use that same format
+- Use the same season numbering format (either "Season 1" or "Season 01") for ALL shows
+
+**ACCURATE FILE NAMING:**
+- Expand non-official abbreviations to proper names: "GOT" → "Game of Thrones", "BB" → "Breaking Bad"
+- Preserve official acronyms that are part of the proper name: "Agents of S.H.I.E.L.D." keeps "S.H.I.E.L.D."
+- Clean up formatting: replace underscores with spaces, fix capitalization, proper year formatting
+- Examples: "The_Matrix_1999_1080p.mkv" → organize with proper "The Matrix (1999)" naming
+- Use consistent punctuation and spacing within each category
+
+**GROUPING REQUIREMENTS:**
+- Group related documents together (same project/topic files go in same folder)
+- Maintain the exact same folder structure and naming pattern for all files of the same type
 
 **If you need clarification to provide better suggestions, include a "clarificationNeeded" field in your response with specific questions.**
 

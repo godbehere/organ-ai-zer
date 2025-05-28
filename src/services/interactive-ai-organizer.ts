@@ -50,10 +50,9 @@ export class InteractiveAIOrganizer {
       console.log(`🔄 Analysis attempt ${attempt}/${maxAttempts}...\n`);
 
       try {
-        // Generate suggestions based on current context with loading spinner
-        const spinner = ora('🤖 Analyzing files and generating organization suggestions...').start();
-        const result = await this.generateContextualSuggestions(files, baseDirectory, context);
-        spinner.stop();
+        // Process files in batches by type for better consistency and reliability
+        console.log('🤖 Processing files in batches by type for optimal consistency...');
+        const result = await this.generateBatchedSuggestions(files, baseDirectory, context);
         
         // Handle AI-generated clarification requests
         if (result.needsClarification) {
@@ -120,13 +119,59 @@ export class InteractiveAIOrganizer {
     throw new Error('Maximum conversation attempts reached. Please try with a simpler organization request.');
   }
 
-  private async generateContextualSuggestions(
+  private async generateBatchedSuggestions(
     files: FileInfo[],
     baseDirectory: string,
     context: ConversationContext
   ): Promise<{ suggestions: OrganizationSuggestion[], needsClarification?: { questions: string[], reason: string } }> {
+    // Group files by type for batch processing
+    const fileGroups = this.groupFilesByType(files);
+    const allSuggestions: OrganizationSuggestion[] = [];
+    let globalClarification: { questions: string[], reason: string } | undefined;
+
+    console.log(`📋 Processing ${Object.keys(fileGroups).length} file type groups...`);
+
+    // Process each group separately
+    for (const [groupName, groupFiles] of Object.entries(fileGroups)) {
+      if (groupFiles.length === 0) continue;
+
+      console.log(`🔄 Processing ${groupName}: ${groupFiles.length} files`);
+      const spinner = ora(`Analyzing ${groupName} files...`).start();
+      
+      try {
+        const groupResult = await this.generateContextualSuggestions(groupFiles, baseDirectory, context, groupName);
+        spinner.succeed(`✅ ${groupName}: ${groupResult.suggestions.length} suggestions generated`);
+        
+        allSuggestions.push(...groupResult.suggestions);
+        
+        // Collect clarification questions (only from first group that has them)
+        if (!globalClarification && groupResult.needsClarification) {
+          globalClarification = groupResult.needsClarification;
+        }
+      } catch (error) {
+        spinner.fail(`❌ ${groupName}: ${error}`);
+        // Use rule-based fallback for this entire group
+        const fallbackSuggestions = groupFiles.map(file => this.createRuleBasedFallback(file));
+        allSuggestions.push(...fallbackSuggestions);
+        console.warn(`⚠️  Using rule-based fallback for ${groupName} group`);
+      }
+    }
+
+    return {
+      suggestions: allSuggestions,
+      needsClarification: globalClarification
+    };
+  }
+
+  private async generateContextualSuggestions(
+    files: FileInfo[],
+    baseDirectory: string,
+    context: ConversationContext,
+    groupName?: string
+  ): Promise<{ suggestions: OrganizationSuggestion[], needsClarification?: { questions: string[], reason: string } }> {
     // Analyze file types and detect projects for better context
     const fileTypeAnalysis = this.analyzeFileTypes(files);
+    const groupContext = groupName ? `\n\nCURRENT BATCH: Processing ${groupName} files specifically. Focus on consistency within this ${groupName} category.` : '';
     
     const response = await this.aiProvider!.analyzeFiles({
       files,
@@ -137,7 +182,7 @@ export class InteractiveAIOrganizer {
         clarifications: context.clarifications,
         rejectedPatterns: context.rejectedSuggestions.map(s => s.suggestedPath),
         approvedPatterns: context.approvedPatterns,
-        fileTypeAnalysis: fileTypeAnalysis // Add file type analysis for better consistency
+        fileTypeAnalysis: fileTypeAnalysis + groupContext // Add batch context
       }
     });
 
@@ -159,11 +204,11 @@ export class InteractiveAIOrganizer {
           file
         });
       } else {
-        // AI failed to provide suggestion - create intelligent fallback based on patterns
-        const intelligentSuggestion = this.createIntelligentFallback(file);
-        allSuggestions.push(intelligentSuggestion);
+        // AI failed to provide suggestion - use rule-based fallback
+        const ruleSuggestion = this.createRuleBasedFallback(file);
+        allSuggestions.push(ruleSuggestion);
         
-        console.warn(`⚠️  AI missed file: ${file.name}, using intelligent fallback`);
+        console.warn(`⚠️  AI missed file: ${file.name}, using rule-based fallback`);
       }
     });
 
@@ -357,86 +402,81 @@ export class InteractiveAIOrganizer {
     return `File type distribution and project analysis for consistency planning:\n${analysis}${projectAnalysis}\n\nCONSISTENCY REQUIREMENTS:\n- Use IDENTICAL patterns for same file types (TV shows, movies, music, etc.)\n- Recognize media patterns: S01E01, (2019), artist names\n- Group related files/projects together\n- Never suggest "no change" unless truly optimal\n- Provide suggestions for ALL files`;
   }
 
-  private createIntelligentFallback(file: FileInfo): OrganizationSuggestion {
-    const fileName = file.name;
-    
-    // Try to match TV show patterns
-    if (fileName.match(/s\d+e\d+/i) || fileName.match(/season\s+\d+/i)) {
-      // Extract show name and season info
-      let showName = fileName;
-      if (fileName.includes('GOT')) showName = fileName.replace('GOT', 'Game of Thrones');
-      if (fileName.includes('Breaking.Bad')) showName = fileName.replace('Breaking.Bad', 'Breaking Bad');
-      
-      // Extract season number
-      const seasonMatch = fileName.match(/s(\d+)/i);
-      const season = seasonMatch ? `Season ${seasonMatch[1]}` : 'Season 1';
-      
-      const cleanShowName = showName.split(/[._-]/)[0].replace(/\b\w/g, l => l.toUpperCase());
-      
-      return {
-        file,
-        suggestedPath: `Shows/${cleanShowName}/${season}/${fileName}`,
-        reason: `TV show episode detected - organized by series and season (fallback)`,
-        confidence: 0.7,
-        category: 'tv-shows'
-      };
-    }
-    
-    // Try to match movie patterns
-    if (fileName.match(/\(\d{4}\)/)) {
-      return {
-        file,
-        suggestedPath: `Movies/${fileName}`,
-        reason: `Movie with year detected - organized by title (fallback)`,
-        confidence: 0.7,
-        category: 'movies'
-      };
-    }
-    
-    // Try to match music patterns
-    if (fileName.match(/\.(mp3|wav|flac|m4a)$/i)) {
-      const parts = fileName.split(' - ');
-      if (parts.length >= 2) {
-        const artist = parts[0].trim();
-        return {
-          file,
-          suggestedPath: `Music/${artist}/${fileName}`,
-          reason: `Music file detected - organized by artist (fallback)`,
-          confidence: 0.7,
-          category: 'music'
-        };
+  private groupFilesByType(files: FileInfo[]): Record<string, FileInfo[]> {
+    const groups: Record<string, FileInfo[]> = {
+      'TV Shows': [],
+      'Movies': [],
+      'Music': [],
+      'Documents': [],
+      'Code Projects': [],
+      'Other': []
+    };
+
+    files.forEach(file => {
+      const category = this.categorizeFileForBatching(file);
+      groups[category].push(file);
+    });
+
+    // Remove empty groups
+    Object.keys(groups).forEach(key => {
+      if (groups[key].length === 0) {
+        delete groups[key];
       }
+    });
+
+    return groups;
+  }
+
+  private categorizeFileForBatching(file: FileInfo): string {
+    const fileName = file.name.toLowerCase();
+    const extension = file.extension.toLowerCase();
+
+    // TV Show patterns (video files with episode/season indicators)
+    if (extension.match(/\.(mkv|mp4|avi|mov)$/) && 
+        (fileName.match(/s\d+e\d+/) || fileName.match(/season\s+\d+/) || 
+         fileName.match(/episode/) || fileName.includes('ep'))) {
+      return 'TV Shows';
     }
-    
-    // Check for related documents
-    if (fileName.includes('Budget_2024_Q1')) {
-      return {
-        file,
-        suggestedPath: `Documents/Budget 2024 Q1/${fileName}`,
-        reason: `Related budget document - grouped together (fallback)`,
-        confidence: 0.7,
-        category: 'documents'
-      };
+
+    // Movie patterns (video files that seem like movies - have years or don't have episode patterns)
+    if (extension.match(/\.(mkv|mp4|avi|mov)$/) && 
+        !fileName.match(/s\d+e\d+/) && !fileName.match(/season\s+\d+/)) {
+      return 'Movies';
     }
-    
-    if (fileName.includes('Project_Plan_v2')) {
-      return {
-        file,
-        suggestedPath: `Documents/Project Plans/${fileName}`,
-        reason: `Project planning document - grouped by type (fallback)`,
-        confidence: 0.7,
-        category: 'documents'
-      };
+
+    // Music files
+    if (extension.match(/\.(mp3|wav|flac|m4a|aac|ogg)$/)) {
+      return 'Music';
     }
-    
-    // Default organization based on file type
+
+    // Code projects (look for project indicators)
+    if (fileName.includes('package.json') || fileName.includes('readme') || 
+        fileName.includes('.js') || fileName.includes('.css') || 
+        fileName.includes('.py') || fileName.includes('.html')) {
+      return 'Code Projects';
+    }
+
+    // Documents
+    if (extension.match(/\.(pdf|docx|xlsx|txt|md)$/)) {
+      return 'Documents';
+    }
+
+    // Images and other files
+    return 'Other';
+  }
+
+  private createRuleBasedFallback(file: FileInfo): OrganizationSuggestion {
+    // Use the same rule-based organization logic as the regular organize command
     const category = this.fileScanner.getFileCategory(file);
+    
+    // Simple category-based organization (same as ai-organizer fallback)
+    const suggestedPath = `${category}/${file.name}`;
+    
     return {
       file,
-      suggestedPath: `${category}/${fileName}`,
-      reason: `Organized by file type (fallback)`,
-      confidence: 0.5,
-      category: category.toLowerCase()
+      suggestedPath,
+      reason: `Rule-based fallback: organized by file type (${category})`,
+      confidence: 0.6
     };
   }
 
