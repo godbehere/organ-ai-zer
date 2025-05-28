@@ -41,8 +41,8 @@ program
 
 program
   .command('interactive')
-  .description('Interactive AI-guided organization with conversation')
-  .argument('<directory>', 'Directory to organize interactively')
+  .description('Conversational AI organizer that analyzes, asks questions, then organizes autonomously')
+  .argument('<directory>', 'Directory to organize with AI conversation')
   .option('-r, --recursive', 'Include subdirectories')
   .option('-c, --config <path>', 'Custom config file path')
   .option('-d, --dry-run', 'Simulate organization without moving files')

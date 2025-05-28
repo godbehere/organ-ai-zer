@@ -48,7 +48,10 @@ export class FileOrganizer {
 
   async createBackup(directory: string): Promise<string> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(path.dirname(directory), `backup_${path.basename(directory)}_${timestamp}`);
+    const resolvedDir = path.resolve(directory);
+    const parentDir = path.dirname(resolvedDir);
+    const dirName = path.basename(resolvedDir);
+    const backupPath = path.join(parentDir, `backup_${dirName}_${timestamp}`);
     
     await fs.copy(directory, backupPath);
     return backupPath;

@@ -1,8 +1,7 @@
 import inquirer from 'inquirer';
-import { FileInfo, OrganizationSuggestion } from '../types';
+import { OrganizationSuggestion } from '../types';
 import { ConfigService } from '../services/config-service';
-import { FileScanner } from '../services/file-scanner';
-import { InteractiveAIOrganizer } from '../services/interactive-ai-organizer';
+import { ConversationalAIOrganizer } from '../services/conversational-ai-organizer';
 import { FileOrganizer } from '../services/file-organizer';
 
 export async function interactiveOrganize(
@@ -10,7 +9,7 @@ export async function interactiveOrganize(
   options: { recursive?: boolean; config?: string; dryRun?: boolean }
 ): Promise<void> {
   try {
-    console.log(`🤖 Starting interactive AI organization for: ${directory}\n`);
+    console.log(`🤖 Starting conversational AI organization for: ${directory}\n`);
     
     // Initialize services
     const configService = ConfigService.getInstance(options.config);
@@ -23,47 +22,12 @@ export async function interactiveOrganize(
       process.exit(1);
     }
 
-    // Get user's organization intent
-    console.log('📝 Let\'s understand how you want to organize your files...\n');
+    // Initialize conversational AI organizer
+    const conversationalOrganizer = new ConversationalAIOrganizer(configService);
     
-    const { organizationIntent } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'organizationIntent',
-        message: 'Describe how you would like this directory organized:',
-        validate: (input) => input.trim().length > 10 || 'Please provide a more detailed description (at least 10 characters)'
-      }
-    ]);
-
-    // Scan files
-    console.log('\n📁 Scanning directory...');
-    const scanner = new FileScanner();
-    const files = await scanner.scanDirectory(directory, options.recursive || false);
-    
-    console.log(`📊 Found ${files.length} files to analyze\n`);
-
-    if (files.length === 0) {
-      console.log('No files found to organize.');
-      return;
-    }
-
-    // Show file overview
-    const filesByType = groupFilesByType(files);
-    console.log('📋 File Overview:');
-    Object.entries(filesByType).forEach(([type, count]) => {
-      console.log(`   ${type}: ${count} files`);
-    });
-    console.log('');
-
-    // Initialize interactive AI organizer
-    const interactiveOrganizer = new InteractiveAIOrganizer(configService);
-    
-    // Start the interactive organization process
-    const suggestions = await interactiveOrganizer.organizeWithConversation(
-      files,
-      directory,
-      organizationIntent
-    );
+    // Start the 3-phase conversational organization process
+    // Phase 1: Analysis, Phase 2: Conversation, Phase 3: Execution
+    const suggestions = await conversationalOrganizer.organizeWithConversation(directory);
 
     if (suggestions.length === 0) {
       console.log('🤷 No organization suggestions were generated.');
@@ -123,27 +87,3 @@ export async function interactiveOrganize(
   }
 }
 
-function groupFilesByType(files: FileInfo[]): Record<string, number> {
-  const groups: Record<string, number> = {};
-  
-  files.forEach(file => {
-    const ext = file.extension.toLowerCase();
-    
-    let category = 'Other';
-    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].includes(ext)) {
-      category = 'Images';
-    } else if (['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv'].includes(ext)) {
-      category = 'Videos';
-    } else if (['.mp3', '.wav', '.flac', '.aac', '.ogg'].includes(ext)) {
-      category = 'Audio';
-    } else if (['.pdf', '.doc', '.docx', '.txt', '.rtf'].includes(ext)) {
-      category = 'Documents';
-    } else if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) {
-      category = 'Archives';
-    }
-    
-    groups[category] = (groups[category] || 0) + 1;
-  });
-  
-  return groups;
-}
