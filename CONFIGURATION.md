@@ -445,3 +445,44 @@ organ-ai-zer organize ~/Photos -c photo-config.json
 ```
 
 This allows customized behavior per use case while maintaining the same tool.
+
+## Interactive Mode Features
+
+The 3-phase interactive mode uses the same configuration but provides enhanced AI-powered organization:
+
+### AI Content Analysis
+- **True Content Understanding**: Goes beyond file extensions to analyze actual content
+- **Project Detection**: Automatically identifies and preserves coding project structures
+- **Pattern Recognition**: Detects relationships between files for optimal grouping
+
+### Enhanced User Experience
+- **Category Grouping**: Preview shows samples grouped by detected content types
+- **Interactive Preview**: Options to explore specific categories or view all changes
+- **Automatic Cleanup**: Removes empty directories left after organization
+- **Progress Feedback**: Spinner animations and real-time status updates
+
+### Configuration Recommendations for Interactive Mode
+
+```json
+{
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-4",
+    "maxTokens": 1500,
+    "temperature": 0.3,
+    "timeout": 45000
+  },
+  "organization": {
+    "confidenceThreshold": 0.7,
+    "createBackups": true,
+    "preserveOriginalNames": false,
+    "maxDepth": 5
+  }
+}
+```
+
+**Interactive Mode Notes:**
+- Higher `maxTokens` (1500+) recommended for detailed content analysis
+- Longer `timeout` (45s+) accommodated for AI analysis of file content
+- `createBackups: true` strongly recommended for safe interactive organization
+- All existing file type configurations apply to interactive mode

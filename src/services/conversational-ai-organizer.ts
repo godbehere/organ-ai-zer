@@ -501,7 +501,7 @@ Only identify directories that are clearly organized development projects. Don't
       throw new Error('AI provider not initialized');
     }
 
-    console.log('🔍 Using AI to analyze file contents and intelligently propose categories...');
+    const spinner = ora('Using AI to analyze file contents and intelligently propose categories...').start();
     
     // Get all sample files for comprehensive analysis
     const allFiles = Object.entries(analysis.sampleFiles).flatMap(([category, files]) =>
@@ -573,10 +573,12 @@ Be thorough and intelligent in your analysis. The user wants to see categories t
       const response = await this.aiProvider.analyzeFiles(request);
       
       // Parse AI response to extract categories
-      return this.parseAICategorizationResponse(response, allFiles);
+      const result = this.parseAICategorizationResponse(response, allFiles);
+      spinner.succeed('AI content analysis complete');
+      return result;
       
     } catch (error) {
-      console.warn('AI content analysis failed, using intelligent fallback analysis');
+      spinner.fail('AI content analysis failed, using intelligent fallback analysis');
       return this.performIntelligentContentAnalysis(analysis);
     }
   }

@@ -34,16 +34,8 @@ export async function interactiveOrganize(
       return;
     }
 
-    // Show final suggestions
-    console.log(`\n📋 Final Organization Plan (${suggestions.length} files):`);
-    console.log('═'.repeat(60));
-    
-    suggestions.forEach((suggestion, index) => {
-      console.log(`\n${index + 1}. ${suggestion.file.name}`);
-      console.log(`   From: ${suggestion.file.path}`);
-      console.log(`   To:   ${suggestion.suggestedPath}`);
-      console.log(`   Reason: ${suggestion.reason}`);
-    });
+    // Show enhanced preview with options
+    await showEnhancedPreview(suggestions, options);
 
     // Confirm execution
     const { shouldExecute } = await inquirer.prompt([
@@ -85,5 +77,136 @@ export async function interactiveOrganize(
     console.error('❌ Interactive organization failed:', error);
     process.exit(1);
   }
+}
+
+async function showEnhancedPreview(
+  suggestions: OrganizationSuggestion[], 
+  _options: { dryRun?: boolean }
+): Promise<void> {
+  // Group suggestions by category/reason
+  const categorizedSuggestions = groupSuggestionsByCategory(suggestions);
+  
+  console.log(`\n📋 Organization Plan Summary (${suggestions.length} files total):`);
+  console.log('═'.repeat(60));
+  
+  // Show category overview with sample files
+  Object.entries(categorizedSuggestions).forEach(([category, categoryFiles]) => {
+    console.log(`\n📂 ${category} (${categoryFiles.length} files):`);
+    
+    // Show up to 3 examples
+    const examples = categoryFiles.slice(0, 3);
+    examples.forEach(suggestion => {
+      console.log(`   ${suggestion.file.name} → ${getRelativePath(suggestion.suggestedPath)}`);
+    });
+    
+    if (categoryFiles.length > 3) {
+      console.log(`   ... and ${categoryFiles.length - 3} more files`);
+    }
+  });
+
+  // Interactive preview options
+  while (true) {
+    const { action } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: '\nWhat would you like to do?',
+        choices: [
+          'Continue with organization',
+          'View details for a specific category',
+          'View all changes',
+          'Cancel organization'
+        ]
+      }
+    ]);
+
+    if (action === 'Continue with organization') {
+      break;
+    } else if (action === 'View details for a specific category') {
+      await showCategoryDetails(categorizedSuggestions);
+    } else if (action === 'View all changes') {
+      await showAllChanges(suggestions);
+    } else if (action === 'Cancel organization') {
+      console.log('Organization cancelled.');
+      process.exit(0);
+    }
+  }
+}
+
+function groupSuggestionsByCategory(suggestions: OrganizationSuggestion[]): Record<string, OrganizationSuggestion[]> {
+  const groups: Record<string, OrganizationSuggestion[]> = {};
+  
+  suggestions.forEach(suggestion => {
+    // Extract category from the reason or target path
+    let category = 'Other';
+    
+    if (suggestion.reason.includes('TV Shows') || suggestion.suggestedPath.includes('/TV Shows/')) {
+      category = 'TV Shows';
+    } else if (suggestion.reason.includes('Movies') || suggestion.suggestedPath.includes('/Movies/')) {
+      category = 'Movies';
+    } else if (suggestion.reason.includes('Music') || suggestion.suggestedPath.includes('/Music/')) {
+      category = 'Music';
+    } else if (suggestion.reason.includes('Documents') || suggestion.suggestedPath.includes('/Documents/')) {
+      category = 'Documents';
+    } else if (suggestion.reason.includes('project') || suggestion.suggestedPath.includes('/Projects/')) {
+      category = 'Code Projects';
+    } else if (suggestion.reason.includes('Images') || suggestion.suggestedPath.includes('/Images/')) {
+      category = 'Images';
+    } else if (suggestion.reason.includes('Spreadsheets') || suggestion.suggestedPath.includes('/Spreadsheets/')) {
+      category = 'Spreadsheets';
+    }
+    
+    if (!groups[category]) {
+      groups[category] = [];
+    }
+    groups[category].push(suggestion);
+  });
+  
+  return groups;
+}
+
+function getRelativePath(fullPath: string): string {
+  const parts = fullPath.split('/');
+  return parts.slice(-2).join('/'); // Show last 2 path segments
+}
+
+async function showCategoryDetails(categorizedSuggestions: Record<string, OrganizationSuggestion[]>): Promise<void> {
+  const categories = Object.keys(categorizedSuggestions);
+  
+  const { selectedCategory } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'selectedCategory',
+      message: 'Which category would you like to explore?',
+      choices: categories.map(cat => `${cat} (${categorizedSuggestions[cat].length} files)`)
+    }
+  ]);
+  
+  const categoryName = selectedCategory.split(' (')[0];
+  const categoryFiles = categorizedSuggestions[categoryName];
+  
+  console.log(`\n📂 ${categoryName} - Detailed Changes:`);
+  console.log('─'.repeat(50));
+  
+  categoryFiles.forEach((suggestion, index) => {
+    console.log(`\n${index + 1}. ${suggestion.file.name}`);
+    console.log(`   From: ${suggestion.file.path}`);
+    console.log(`   To:   ${suggestion.suggestedPath}`);
+    console.log(`   Reason: ${suggestion.reason}`);
+  });
+  
+  console.log(`\n📊 Total files in ${categoryName}: ${categoryFiles.length}`);
+}
+
+async function showAllChanges(suggestions: OrganizationSuggestion[]): Promise<void> {
+  console.log(`\n📋 Complete Organization Plan (${suggestions.length} files):`);
+  console.log('═'.repeat(60));
+  
+  suggestions.forEach((suggestion, index) => {
+    console.log(`\n${index + 1}. ${suggestion.file.name}`);
+    console.log(`   From: ${suggestion.file.path}`);
+    console.log(`   To:   ${suggestion.suggestedPath}`);
+    console.log(`   Reason: ${suggestion.reason}`);
+  });
 }
 

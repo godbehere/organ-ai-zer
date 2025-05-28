@@ -1,6 +1,6 @@
-# Interactive Organization Examples
+# 3-Phase Interactive Organization Examples
 
-Here are real-world examples of how the interactive organize feature works in practice.
+Here are real-world examples of how the advanced 3-phase conversational AI organize feature works in practice, showcasing AI content analysis, targeted dialogue, and enhanced organization capabilities.
 
 ## Example 1: Media Library Organization
 
@@ -12,42 +12,58 @@ User has a mixed media collection with movies, TV shows, and music that needs sy
 ```bash
 $ organ-ai-zer interactive ~/Media --recursive
 
-🤖 Starting interactive AI organization for: /home/user/Media
+🤖 Starting conversational AI organization for: /home/user/Media
 
-📝 Let's understand how you want to organize your files...
+📁 Phase 1: Analyzing directory structure and content...
+🔍 Detecting projects and analyzing file patterns...
 
-? Describe how you would like this directory organized:
-> I want movies organized by genre and year, TV shows by series with seasons, and music by artist and album
+🧠 Using AI to analyze file contents...
+   ⏳ Analyzing video files for content classification...
+   ⏳ Analyzing audio files for artist/album structure...
+   ⏳ Analyzing images for event detection...
 
-📁 Scanning directory...
-📊 Found 245 files to analyze
+📊 Content Analysis Complete:
+   Movies: 120 files (various genres, years, qualities)
+   TV Shows: 60 files (multiple series and seasons)  
+   Music: 60 files (organized by artist/album structure)
+   Images: 5 files (mixed content)
 
-📋 File Overview:
-   Videos: 180 files
-   Audio: 60 files
-   Images: 5 files
+💬 Phase 2: Understanding your organization preferences...
 
-🤖 Starting AI analysis and conversation...
+📺 Let's discuss your Movie files (120 files detected):
+? How would you like movies organized?
+> I want movies organized by genre and year
 
-🔄 Analysis attempt 1/5...
+📺 For your TV Show files (60 files detected):  
+? What's your preferred TV show organization?
+> TV shows by series with seasons
 
-📋 Proposed Organization (showing 10 of 245 files):
+🎵 For your Music collection (60 files):
+? What's your preferred music organization structure?  
+> Music by artist and album
 
-1. The_Avengers_2012_1080p.mkv
-   → Movies/Action/2012/The_Avengers_2012_1080p.mkv
-   Reason: Action movie from 2012, organized by genre and year as requested
+🔄 Generating organization strategy based on your preferences...
 
-2. Breaking_Bad_S01E01_1080p.mkv
-   → TV_Shows/Breaking_Bad/Season_01/Breaking_Bad_S01E01_1080p.mkv
-   Reason: TV show episode organized by series and season structure
+📋 Phase 3: Organization Plan Summary (245 files total):
+═══════════════════════════════════════════════════════════
 
-3. The_Beatles_Abbey_Road_01_Come_Together.mp3
-   → Music/The_Beatles/Abbey_Road/01_Come_Together.mp3
-   Reason: Music organized by artist and album as requested
+📂 Movies (120 files):
+   The_Avengers_2012_1080p.mkv → Movies/Action/2012/The_Avengers_2012_1080p.mkv
+   Inception_2010_4K.mkv → Movies/Sci-Fi/2010/Inception_2010_4K.mkv
+   The_Godfather_1972_1080p.mkv → Movies/Drama/1972/The_Godfather_1972_1080p.mkv
+   ... and 117 more files
 
-... and 242 more files organized similarly.
+📂 TV Shows (60 files):
+   Breaking_Bad_S01E01_1080p.mkv → TV_Shows/Breaking_Bad/Season_01/Breaking_Bad_S01E01_1080p.mkv
+   Game_of_Thrones_S01E02_1080p.mkv → TV_Shows/Game_of_Thrones/Season_01/Game_of_Thrones_S01E02_1080p.mkv
+   ... and 58 more files
 
-? How do these organization suggestions look?
+📂 Music (60 files):
+   The_Beatles_Abbey_Road_01_Come_Together.mp3 → Music/The_Beatles/Abbey_Road/01_Come_Together.mp3
+   Pink_Floyd_Dark_Side_Time.mp3 → Music/Pink_Floyd/Dark_Side_of_the_Moon/Time.mp3
+   ... and 58 more files
+
+? What would you like to do?
 ❯ 🔧 Good direction, but needs some adjustments
 
 ? What adjustments would you like?
@@ -95,7 +111,13 @@ Do you want to execute this organization plan? Yes
 ✅ Moved: The_Beatles_Abbey_Road_01_Come_Together.mp3 → Music/The_Beatles/Abbey_Road/01_Come_Together.mp3
 ... [242 more files moved]
 
+🧹 Cleaning up empty directories...
+🗑️  Removed empty directory: /old-mixed-folder
+🗑️  Removed empty directory: /temp-files
+
 ✅ Interactive organization complete!
+📊 Organized 245 files into 4 main categories
+🧹 Cleaned up 2 empty directories
 ```
 
 ### Final Structure

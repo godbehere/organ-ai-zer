@@ -4,12 +4,15 @@ An intelligent file organizer powered by AI that automatically categorizes and o
 
 ## Features
 
-- 🤖 **AI-Powered Organization**: Uses OpenAI or Anthropic models for intelligent file analysis
-- 📋 **Flexible Configuration**: Highly customizable organization rules and naming patterns
+- 🤖 **3-Phase Conversational AI**: Advanced AI architecture with analysis, conversation, and autonomous organization
+- 🧠 **True AI Content Analysis**: Goes beyond file extensions to understand actual file content and patterns
+- 🏗️ **Project Structure Preservation**: Automatically detects and maintains coding project integrity
+- 📋 **Enhanced Preview System**: Category grouping with samples and interactive exploration options
+- 🧹 **Automatic Cleanup**: Removes empty directories left after organization
 - 🔍 **Preview Mode**: See what changes will be made before applying them
 - 🛡️ **Safe Operations**: Automatic backups and dry-run capabilities
 - 🎯 **Smart Categorization**: Recognizes file types, dates, projects, and content patterns
-- ⚡ **CLI Interface**: Fast command-line tool for power users
+- ⚡ **CLI Interface**: Fast command-line tool with spinner animations and progress feedback
 
 ## Installation
 
@@ -54,15 +57,19 @@ npm install -g .
    organ-ai-zer organize ~/Downloads
    ```
 
-### New: Interactive AI Organization
+### New: 3-Phase Conversational AI Organization
 
-For complex organization needs, use the conversational AI feature:
+For complex organization needs, use the advanced conversational AI feature with intelligent 3-phase architecture:
 
 ```bash
 organ-ai-zer interactive ~/Media --recursive
 ```
 
-This starts a conversation where you describe how you want files organized, and the AI iteratively refines suggestions based on your feedback. Perfect for media libraries, project files, and custom organization schemes.
+**Phase 1: AI Analysis** - Intelligently detects projects, analyzes file content, and identifies patterns
+**Phase 2: Conversation** - Conducts smart dialogue to understand your preferences for each content type
+**Phase 3: Organization** - Autonomously organizes files with enhanced preview and empty directory cleanup
+
+Perfect for media libraries, project files, and custom organization schemes with true AI content understanding.
 
 ### Alternative: Non-Interactive Setup
 
@@ -257,7 +264,13 @@ organ-ai-zer interactive ~/Downloads --dry-run
 organ-ai-zer interactive ~/Projects -c work-config.json
 ```
 
-This command starts a conversation where you describe your organization goals, and the AI iteratively refines suggestions based on your feedback. See [INTERACTIVE_ORGANIZE.md](INTERACTIVE_ORGANIZE.md) for detailed usage examples.
+This command uses advanced 3-phase AI architecture:
+
+1. **AI Analysis Phase**: Intelligently detects coding projects, analyzes file content with AI, and identifies patterns
+2. **Conversation Phase**: Conducts targeted dialogue to understand your preferences for each detected content type
+3. **Organization Phase**: Executes organization with enhanced preview (category grouping, samples) and automatic empty directory cleanup
+
+Features true AI content analysis, project structure preservation, spinner animations during analysis, and interactive preview options. See [INTERACTIVE_ORGANIZE.md](INTERACTIVE_ORGANIZE.md) for detailed usage examples.
 
 ### `organize`
 Organize files according to AI suggestions.

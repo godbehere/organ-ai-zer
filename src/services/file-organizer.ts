@@ -4,14 +4,23 @@ import { OrganizationSuggestion } from '../types';
 
 export class FileOrganizer {
   async applySuggestions(suggestions: OrganizationSuggestion[]): Promise<void> {
+    const sourceDirectories = new Set<string>();
+    
     for (const suggestion of suggestions) {
       try {
+        // Track source directories for cleanup
+        const sourceDir = path.dirname(suggestion.file.path);
+        sourceDirectories.add(sourceDir);
+        
         await this.moveFile(suggestion);
         console.log(`✅ Moved: ${suggestion.file.name} → ${suggestion.suggestedPath}`);
       } catch (error) {
         console.error(`❌ Failed to move ${suggestion.file.name}: ${error}`);
       }
     }
+    
+    // Clean up empty directories
+    await this.cleanupEmptyDirectories(Array.from(sourceDirectories));
   }
 
   private async moveFile(suggestion: OrganizationSuggestion): Promise<void> {
@@ -55,5 +64,65 @@ export class FileOrganizer {
     
     await fs.copy(directory, backupPath);
     return backupPath;
+  }
+
+  private async cleanupEmptyDirectories(directories: string[]): Promise<void> {
+    // Sort directories by depth (deepest first) to ensure we clean up child directories before parents
+    const sortedDirectories = directories.sort((a, b) => b.split('/').length - a.split('/').length);
+    
+    for (const directory of sortedDirectories) {
+      try {
+        await this.cleanupEmptyDirectory(directory);
+      } catch (error) {
+        console.warn(`⚠️  Could not cleanup directory ${directory}: ${error}`);
+      }
+    }
+  }
+
+  private async cleanupEmptyDirectory(directory: string): Promise<void> {
+    try {
+      // Check if directory exists
+      if (!(await fs.pathExists(directory))) {
+        return;
+      }
+
+      // Read directory contents
+      const contents = await fs.readdir(directory);
+      
+      // If directory is empty, remove it
+      if (contents.length === 0) {
+        await fs.remove(directory);
+        console.log(`🗑️  Removed empty directory: ${directory}`);
+        
+        // Recursively check parent directory
+        const parentDir = path.dirname(directory);
+        if (parentDir !== directory) { // Avoid infinite recursion at root
+          await this.cleanupEmptyDirectory(parentDir);
+        }
+      }
+      // If directory only contains hidden files (like .DS_Store), we might want to remove it too
+      else if (contents.every(item => item.startsWith('.'))) {
+        // Only remove if all files are common system files
+        const systemFiles = ['.DS_Store', '.Thumbs.db', 'desktop.ini'];
+        if (contents.every(item => systemFiles.includes(item))) {
+          // Remove system files first
+          for (const file of contents) {
+            await fs.remove(path.join(directory, file));
+          }
+          // Then remove the directory
+          await fs.remove(directory);
+          console.log(`🗑️  Removed directory with only system files: ${directory}`);
+          
+          // Recursively check parent directory
+          const parentDir = path.dirname(directory);
+          if (parentDir !== directory) {
+            await this.cleanupEmptyDirectory(parentDir);
+          }
+        }
+      }
+    } catch (error) {
+      // Silently ignore errors during cleanup - it's not critical
+      console.warn(`⚠️  Could not cleanup directory ${directory}: ${error}`);
+    }
   }
 }
