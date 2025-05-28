@@ -25,31 +25,43 @@ export async function interactiveOrganize(
     // Initialize conversational AI organizer
     const conversationalOrganizer = new ConversationalAIOrganizer(configService);
     
-    // Start the 3-phase conversational organization process
-    // Phase 1: Analysis, Phase 2: Conversation, Phase 3: Execution
-    const suggestions = await conversationalOrganizer.organizeWithConversation(directory);
+    // Main organization loop - allows starting over
+    let suggestions: OrganizationSuggestion[];
+    while (true) {
+      // Start the 3-phase conversational organization process
+      // Phase 1: Analysis, Phase 2: Conversation, Phase 3: Execution
+      suggestions = await conversationalOrganizer.organizeWithConversation(directory);
 
-    if (suggestions.length === 0) {
-      console.log('🤷 No organization suggestions were generated.');
-      return;
-    }
-
-    // Show enhanced preview with options
-    await showEnhancedPreview(suggestions, options);
-
-    // Confirm execution
-    const { shouldExecute } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'shouldExecute',
-        message: `\nDo you want to ${options.dryRun ? 'simulate' : 'execute'} this organization plan?`,
-        default: false
+      if (suggestions.length === 0) {
+        console.log('🤷 No organization suggestions were generated.');
+        return;
       }
-    ]);
 
-    if (!shouldExecute) {
-      console.log('Organization cancelled.');
-      return;
+      // Show enhanced preview with options
+      const previewAction = await showEnhancedPreview(suggestions, options);
+      
+      if (previewAction === 'start_over') {
+        console.log('\n🔄 Starting over with new preferences...\n');
+        continue; // Restart the organization process
+      }
+
+      // Confirm execution
+      const { shouldExecute } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'shouldExecute',
+          message: `\nDo you want to ${options.dryRun ? 'simulate' : 'execute'} this organization plan?`,
+          default: false
+        }
+      ]);
+
+      if (!shouldExecute) {
+        console.log('Organization cancelled.');
+        return;
+      }
+      
+      // Break out of loop to proceed with execution
+      break;
     }
 
     if (options.dryRun) {
@@ -82,7 +94,7 @@ export async function interactiveOrganize(
 async function showEnhancedPreview(
   suggestions: OrganizationSuggestion[], 
   _options: { dryRun?: boolean }
-): Promise<void> {
+): Promise<'continue' | 'start_over'> {
   // Group suggestions by category/reason
   const categorizedSuggestions = groupSuggestionsByCategory(suggestions);
   
@@ -115,17 +127,23 @@ async function showEnhancedPreview(
           'Continue with organization',
           'View details for a specific category',
           'View all changes',
+          'Start over with new preferences',
           'Cancel organization'
         ]
       }
     ]);
 
     if (action === 'Continue with organization') {
-      break;
+      return 'continue';
     } else if (action === 'View details for a specific category') {
-      await showCategoryDetails(categorizedSuggestions);
+      const categoryAction = await showCategoryDetails(categorizedSuggestions);
+      if (categoryAction === 'start_over') {
+        return 'start_over';
+      }
     } else if (action === 'View all changes') {
       await showAllChanges(suggestions);
+    } else if (action === 'Start over with new preferences') {
+      return 'start_over';
     } else if (action === 'Cancel organization') {
       console.log('Organization cancelled.');
       process.exit(0);
@@ -170,7 +188,7 @@ function getRelativePath(fullPath: string): string {
   return parts.slice(-2).join('/'); // Show last 2 path segments
 }
 
-async function showCategoryDetails(categorizedSuggestions: Record<string, OrganizationSuggestion[]>): Promise<void> {
+async function showCategoryDetails(categorizedSuggestions: Record<string, OrganizationSuggestion[]>): Promise<'continue' | 'start_over' | null> {
   const categories = Object.keys(categorizedSuggestions);
   
   const { selectedCategory } = await inquirer.prompt([
@@ -196,6 +214,96 @@ async function showCategoryDetails(categorizedSuggestions: Record<string, Organi
   });
   
   console.log(`\n📊 Total files in ${categoryName}: ${categoryFiles.length}`);
+  
+  // Add options for this category
+  const { categoryAction } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'categoryAction',
+      message: `\nWhat would you like to do with the ${categoryName} category?`,
+      choices: [
+        'Go back to main preview',
+        'Modify organization rules for this category',
+        'Start over with new preferences'
+      ]
+    }
+  ]);
+
+  if (categoryAction === 'Go back to main preview') {
+    return null; // Continue with category viewing
+  } else if (categoryAction === 'Modify organization rules for this category') {
+    return await modifyCategoryRules(categoryName, categoryFiles);
+  } else if (categoryAction === 'Start over with new preferences') {
+    return 'start_over';
+  }
+  
+  return null;
+}
+
+async function modifyCategoryRules(categoryName: string, categoryFiles: OrganizationSuggestion[]): Promise<'continue' | 'start_over'> {
+  console.log(`\n🔧 Modifying rules for ${categoryName} category:`);
+  console.log('─'.repeat(50));
+  
+  // Show current pattern example
+  if (categoryFiles.length > 0) {
+    const example = categoryFiles[0];
+    console.log(`📁 Current organization pattern:`);
+    console.log(`   ${example.file.name} → ${example.suggestedPath}`);
+    console.log(`   Reason: ${example.reason}\n`);
+  }
+  
+  const { modificationType } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'modificationType',
+      message: 'How would you like to modify this category?',
+      choices: [
+        'Change the folder structure/naming pattern',
+        'Provide specific instructions for this file type',
+        'Keep current rules but ask AI to reconsider',
+        'Go back without changes'
+      ]
+    }
+  ]);
+
+  if (modificationType === 'Go back without changes') {
+    return 'continue';
+  } else if (modificationType === 'Change the folder structure/naming pattern') {
+    const { newPattern } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'newPattern',
+        message: `How would you like ${categoryName} files organized instead?`,
+        default: `Describe your preferred folder structure for ${categoryName.toLowerCase()} files`
+      }
+    ]);
+    
+    console.log(`\n✅ Your new preference for ${categoryName}: ${newPattern}`);
+    console.log('💡 This will be applied when you start over with new preferences.\n');
+    
+    return 'start_over';
+  } else if (modificationType === 'Provide specific instructions for this file type') {
+    const { specificInstructions } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'specificInstructions',
+        message: `What specific instructions do you have for ${categoryName} files?`,
+        default: `e.g., "Include quality in filename", "Organize by decade", "Group by artist"`
+      }
+    ]);
+    
+    console.log(`\n✅ Your specific instructions for ${categoryName}: ${specificInstructions}`);
+    console.log('💡 This will be applied when you start over with new preferences.\n');
+    
+    return 'start_over';
+  } else if (modificationType === 'Keep current rules but ask AI to reconsider') {
+    console.log(`\n🤖 The AI will reconsider the ${categoryName} organization with fresh analysis.`);
+    console.log('💡 This will happen when you start over with new preferences.\n');
+    
+    return 'start_over';
+  }
+  
+  return 'continue';
 }
 
 async function showAllChanges(suggestions: OrganizationSuggestion[]): Promise<void> {
