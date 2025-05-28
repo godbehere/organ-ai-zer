@@ -50,6 +50,11 @@ export abstract class BaseAIProvider {
   protected buildPrompt(request: AIAnalysisRequest): string {
     const { files, baseDirectory, existingStructure, userPreferences } = request;
     
+    // Check if this is a custom prompt request
+    if (userPreferences?.customPrompt) {
+      return userPreferences.customPrompt;
+    }
+    
     // Check if this is an interactive/conversational request
     if (userPreferences?.intent) {
       return this.buildConversationalPrompt(request);
