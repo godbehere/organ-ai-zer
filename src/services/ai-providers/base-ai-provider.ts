@@ -122,7 +122,7 @@ Important: Only return valid JSON. Maintain consistency across similar file type
 **User's Intent:** ${userPreferences.intent}
 
 **Additional Context from Conversation:**
-${userPreferences.clarifications?.length > 0 ? userPreferences.clarifications.join('\n') : 'No additional clarifications yet.'}
+${userPreferences.clarifications || 'No additional clarifications yet.'}
 
 **Previously Rejected Organization Patterns:**
 ${userPreferences.rejectedPatterns?.length > 0 ? 

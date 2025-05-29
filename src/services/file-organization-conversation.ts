@@ -3,6 +3,27 @@ import { BaseAIProvider } from './ai-providers/base-ai-provider';
 import { AIConversationContext, ConversationResult, ConversationConfig } from './ai-conversation-context';
 
 /**
+ * Clarification phases where AI can ask questions
+ */
+export enum ClarificationPhase {
+  INITIAL_ANALYSIS = 'analysis',
+  SUGGESTIONS = 'suggestions', 
+  REFINEMENT = 'refinement'
+}
+
+/**
+ * Structured clarification data
+ */
+export interface Clarification {
+  id: string;
+  phase: ClarificationPhase;
+  question: string;
+  answer: string;
+  context: string;
+  timestamp: Date;
+}
+
+/**
  * File organization specific conversation context data
  */
 export interface FileOrganizationContext {
@@ -18,6 +39,8 @@ export interface FileOrganizationContext {
   approvedPatterns: string[];
   /** AI-discovered categories and their files */
   discoveredCategories: Record<string, FileInfo[]>;
+  /** Collected clarifications from user */
+  clarifications: Clarification[];
   /** Current processing batch */
   currentBatch?: {
     name: string;
@@ -93,6 +116,7 @@ export class FileOrganizationConversation {
       rejectedSuggestions: [],
       approvedPatterns: [],
       discoveredCategories: {},
+      clarifications: [],
       phase: 'analysis'
     };
 
@@ -156,14 +180,30 @@ export class FileOrganizationConversation {
         this.conversationContext.setCustomContext('organization', this.organizationContext);
       }
 
+      // Handle clarification questions if needed - with immediate re-analysis
+      if (result.questions && result.questions.length > 0) {
+        const reason = 'I need some clarification to provide better organization suggestions';
+        const context = 'Initial file analysis and categorization';
+        
+        const clarificationsHandled = await this.handleClarifications(
+          result.questions,
+          reason,
+          ClarificationPhase.INITIAL_ANALYSIS,
+          context
+        );
+
+        if (clarificationsHandled) {
+          // Immediately re-run analysis with new clarifications
+          console.log('🔄 Re-analyzing with your clarifications...\n');
+          return this.startAnalysis(); // Recursive call with new context
+        }
+      }
+
       return {
         ...result,
         suggestions: parsed.suggestions || [],
         discoveredCategories: parsed.categories,
-        needsClarification: result.questions ? {
-          questions: result.questions,
-          reason: 'AI needs clarification to better understand your organization preferences'
-        } : undefined
+        needsClarification: undefined // No clarification needed since we handled it
       };
     } catch (error) {
       throw new Error(`Failed to start AI analysis: ${error}`);
@@ -235,12 +275,29 @@ export class FileOrganizationConversation {
           rejectedPatterns: this.organizationContext.rejectedSuggestions.map(s => s.suggestedPath),
           approvedPatterns: this.organizationContext.approvedPatterns,
           contextSummary: contextSummary,
+          clarifications: this.getClarificationsContext(),
           // Increase token limit for final suggestions to handle all files
           maxTokens: Math.max(4000, this.organizationContext.files.length * 150), // ~150 tokens per file suggestion
           temperature: 0.3 // Lower temperature for final suggestions
         }
       });
       
+      // Handle clarification questions if needed during suggestions
+      if (response.clarificationNeeded && response.clarificationNeeded.questions) {
+        const clarificationsHandled = await this.handleClarifications(
+          response.clarificationNeeded.questions,
+          response.clarificationNeeded.reason || 'I need clarification to provide better organization suggestions',
+          ClarificationPhase.SUGGESTIONS,
+          'Final organization suggestions generation'
+        );
+
+        if (clarificationsHandled) {
+          // Immediately re-run suggestions generation with new clarifications
+          console.log('🔄 Regenerating suggestions with your clarifications...\n');
+          return this.generateFinalSuggestions(); // Recursive call with new context
+        }
+      }
+
       const suggestions = response.suggestions.map((suggestion: any) => ({
         file: this.organizationContext.files.find(f => f.name === suggestion.suggestedPath.split('/').pop()) || 
               this.organizationContext.files.find(f => f.name === suggestion.fileName) ||
@@ -256,7 +313,7 @@ export class FileOrganizationConversation {
         response: response.reasoning,
         suggestions,
         needsInput: false,
-        needsClarification: undefined
+        needsClarification: undefined // No clarification needed since we handled it
       };
     } catch (error) {
       throw new Error(`Failed to generate final suggestions: ${error}`);
@@ -292,6 +349,78 @@ export class FileOrganizationConversation {
     }
 
     return this.continueConversation(feedbackMessage);
+  }
+
+  /**
+   * Handle clarification questions from AI at any phase
+   */
+  async handleClarifications(
+    questions: string[], 
+    reason: string, 
+    phase: ClarificationPhase,
+    context: string = ''
+  ): Promise<boolean> {
+    if (!questions || questions.length === 0) {
+      return false;
+    }
+
+    console.log(`\n🤔 ${reason}\n`);
+
+    const clarifications: Clarification[] = [];
+
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i];
+      console.log(`❓ Question ${i + 1}/${questions.length}:`);
+      
+      const { answer } = await (await import('inquirer')).default.prompt([
+        {
+          type: 'input',
+          name: 'answer',
+          message: question,
+          validate: (input: string) => input.trim().length > 0 || 'Please provide an answer'
+        }
+      ]);
+
+      const clarification: Clarification = {
+        id: `${phase}_${Date.now()}_${i}`,
+        phase,
+        question,
+        answer: answer.trim(),
+        context: context || `Clarification during ${phase} phase`,
+        timestamp: new Date()
+      };
+
+      clarifications.push(clarification);
+      console.log(`✅ Answer recorded: ${answer}\n`);
+    }
+
+    // Store clarifications
+    this.organizationContext.clarifications.push(...clarifications);
+    this.conversationContext.setCustomContext('organization', this.organizationContext);
+
+    console.log(`📝 Recorded ${clarifications.length} clarification(s). Let me reconsider with this new information...\n`);
+    
+    return true;
+  }
+
+  /**
+   * Get clarifications for a specific phase
+   */
+  getClarificationsForPhase(phase: ClarificationPhase): Clarification[] {
+    return this.organizationContext.clarifications.filter(c => c.phase === phase);
+  }
+
+  /**
+   * Get all clarifications as formatted context for AI
+   */
+  getClarificationsContext(): string {
+    if (this.organizationContext.clarifications.length === 0) {
+      return 'No clarifications provided yet.';
+    }
+
+    return this.organizationContext.clarifications
+      .map((c, index) => `${index + 1}. [${c.phase}] Q: ${c.question} A: ${c.answer}`)
+      .join('\n');
   }
 
   /**
@@ -344,6 +473,14 @@ export class FileOrganizationConversation {
 - Discover custom categories specific to the user's content
 - Adapt organization patterns based on what the files actually are
 - Support any domain: research papers, photos, projects, documents, media, etc.
+
+**MEDIA FILES:**
+- Critical to ensure naming conventions are consistent
+- Once a naming pattern is established for a category, apply it consistently
+
+**CODING PROJECTS:**
+- Identify related files that belong to the same project
+- If a project is identified, structure must be maintained
 
 **RESPONSE STYLE:**
 - Be conversational and helpful
@@ -471,6 +608,10 @@ Please ensure every file is included in your suggestions.`;
 
     if (this.organizationContext.approvedPatterns.length > 0) {
       sections.push(`- Approved Patterns: ${this.organizationContext.approvedPatterns.join(', ')}`);
+    }
+
+    if (this.organizationContext.clarifications.length > 0) {
+      sections.push(`- User Clarifications: ${this.organizationContext.clarifications.length} provided`);
     }
 
     return sections.join('\n');
