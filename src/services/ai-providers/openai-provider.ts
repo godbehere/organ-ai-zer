@@ -26,6 +26,10 @@ export class OpenAIProvider extends BaseAIProvider {
     try {
       const prompt = this.buildPrompt(request);
       
+      // Use dynamic token limits from userPreferences if provided
+      const maxTokens = request.userPreferences?.maxTokens || this.maxTokens;
+      const temperature = request.userPreferences?.temperature || this.temperature;
+      
       const completion = await this.client.chat.completions.create({
         model: this.model,
         messages: [
@@ -38,13 +42,22 @@ export class OpenAIProvider extends BaseAIProvider {
             content: prompt
           }
         ],
-        max_tokens: this.maxTokens,
-        temperature: this.temperature
+        max_tokens: maxTokens,
+        temperature: temperature
       });
 
       const content = completion.choices[0]?.message?.content;
       if (!content) {
         throw new Error('No response content from OpenAI');
+      }
+
+      // For custom prompts, return the raw response without parsing
+      if (request.userPreferences?.customPrompt) {
+        return {
+          suggestions: [],
+          reasoning: content,
+          clarificationNeeded: undefined
+        };
       }
 
       const parsedResponse = this.parseAIResponse(content);

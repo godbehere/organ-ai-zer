@@ -26,13 +26,17 @@ export class AnthropicProvider extends BaseAIProvider {
     try {
       const prompt = this.buildPrompt(request);
       
+      // Use dynamic token limits from userPreferences if provided
+      const maxTokens = request.userPreferences?.maxTokens || this.maxTokens;
+      const temperature = request.userPreferences?.temperature || this.temperature;
+      
       console.log(`🔗 Making Anthropic API call with ${request.files.length} files...`);
-      console.log(`📋 Model: ${this.model}, Max Tokens: ${this.maxTokens}, Temperature: ${this.temperature}`);
+      console.log(`📋 Model: ${this.model}, Max Tokens: ${maxTokens}, Temperature: ${temperature}`);
       
       const message = await this.client.messages.create({
         model: this.model,
-        max_tokens: this.maxTokens,
-        temperature: this.temperature,
+        max_tokens: maxTokens,
+        temperature: temperature,
         messages: [
           {
             role: 'user',
@@ -46,6 +50,15 @@ export class AnthropicProvider extends BaseAIProvider {
       const content = message.content[0];
       if (content.type !== 'text') {
         throw new Error('Unexpected response type from Anthropic');
+      }
+
+      // For custom prompts, return the raw response without parsing
+      if (request.userPreferences?.customPrompt) {
+        return {
+          suggestions: [],
+          reasoning: content.text,
+          clarificationNeeded: undefined
+        };
       }
 
       console.log(`📝 Parsing AI response...`);

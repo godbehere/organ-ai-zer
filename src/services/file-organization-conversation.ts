@@ -218,17 +218,45 @@ export class FileOrganizationConversation {
   async generateFinalSuggestions(): Promise<OrganizationConversationResult> {
     this.setPhase('organization');
     
-    const finalPrompt = this.buildFinalSuggestionsPrompt();
-    
     try {
-      const result = await this.conversationContext.continueWithPrompt(finalPrompt);
+      // Use the standard AI provider interface for final suggestions (not custom prompt)
+      // This ensures we get proper JSON response with suggestions array
+      const contextSummary = this.buildContextSummary();
       
-      const suggestions = this.parseFinalSuggestions(result.response);
+      // Get AI provider from conversation context
+      const aiProvider = (this.conversationContext as any).aiProvider;
+      
+      const response = await aiProvider.analyzeFiles({
+        files: this.organizationContext.files,
+        baseDirectory: this.organizationContext.baseDirectory,
+        existingStructure: [],
+        userPreferences: {
+          intent: this.organizationContext.intent,
+          rejectedPatterns: this.organizationContext.rejectedSuggestions.map(s => s.suggestedPath),
+          approvedPatterns: this.organizationContext.approvedPatterns,
+          contextSummary: contextSummary,
+          // Increase token limit for final suggestions to handle all files
+          maxTokens: Math.max(4000, this.organizationContext.files.length * 150), // ~150 tokens per file suggestion
+          temperature: 0.3 // Lower temperature for final suggestions
+        }
+      });
+      
+      const suggestions = response.suggestions.map((suggestion: any) => ({
+        file: this.organizationContext.files.find(f => f.name === suggestion.suggestedPath.split('/').pop()) || 
+              this.organizationContext.files.find(f => f.name === suggestion.fileName) ||
+              suggestion.file!,
+        suggestedPath: suggestion.suggestedPath,
+        reason: suggestion.reason,
+        confidence: suggestion.confidence,
+        category: suggestion.category,
+        metadata: suggestion.metadata
+      }));
       
       return {
-        ...result,
+        response: response.reasoning,
         suggestions,
-        needsClarification: undefined // Final suggestions shouldn't need clarification
+        needsInput: false,
+        needsClarification: undefined
       };
     } catch (error) {
       throw new Error(`Failed to generate final suggestions: ${error}`);
@@ -464,8 +492,15 @@ Please ensure every file is included in your suggestions.`;
       
       const result: any = {};
       
+      // Handle different category field names the AI might use
       if (parsed.discoveredCategories) {
         result.categories = parsed.discoveredCategories;
+      } else if (parsed.discoveredContentTypes) {
+        result.categories = parsed.discoveredContentTypes;
+      } else if (parsed.categories) {
+        result.categories = parsed.categories;
+      } else if (parsed.contentTypes) {
+        result.categories = parsed.contentTypes;
       }
       
       if (parsed.suggestions) {
