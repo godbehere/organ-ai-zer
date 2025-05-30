@@ -1,78 +1,6 @@
-import { BaseAIProvider } from './ai-providers/base-ai-provider';
-
-/**
- * Generic conversation message types
- */
-export type MessageRole = 'user' | 'assistant' | 'system';
-
-export interface ConversationMessage {
-  role: MessageRole;
-  content: string;
-  timestamp: Date;
-  metadata?: Record<string, any>;
-}
-
-/**
- * Generic conversation context for any AI interaction
- */
-export interface ConversationContext {
-  /** Unique conversation ID */
-  id: string;
-  /** Subject/topic of the conversation */
-  subject: string;
-  /** Current conversation state */
-  state: 'active' | 'paused' | 'complete' | 'failed';
-  /** Conversation messages history */
-  messages: ConversationMessage[];
-  /** Custom context data specific to the conversation type */
-  customContext: Record<string, any>;
-  /** Configuration for this conversation */
-  config: ConversationConfig;
-  /** Creation timestamp */
-  createdAt: Date;
-  /** Last updated timestamp */
-  updatedAt: Date;
-  /** Number of turns/exchanges */
-  turnCount: number;
-}
-
-/**
- * Configuration for conversation behavior
- */
-export interface ConversationConfig {
-  /** Maximum number of turns before timeout */
-  maxTurns: number;
-  /** System prompt template */
-  systemPrompt?: string;
-  /** Custom prompt parameters */
-  promptParams?: Record<string, any>;
-  /** Whether to maintain full message history */
-  keepFullHistory: boolean;
-  /** Maximum context window size */
-  maxContextSize?: number;
-  /** Temperature for AI responses */
-  temperature?: number;
-  /** Custom AI provider settings */
-  aiSettings?: Record<string, any>;
-}
-
-/**
- * Result from an AI conversation turn
- */
-export interface ConversationResult<T = any> {
-  /** AI response content */
-  response: string;
-  /** Parsed structured data (if applicable) */
-  data?: T;
-  /** Whether the conversation needs user input */
-  needsInput: boolean;
-  /** Specific questions or prompts for user */
-  questions?: string[];
-  /** Confidence level of the response */
-  confidence?: number;
-  /** Metadata about the response */
-  metadata?: Record<string, any>;
-}
+import { ZodSchema } from 'zod';
+import { ConversationConfig, ConversationContext, ConversationMessage, ConversationResult, MessageRole } from '../types';
+import { AIAnalysisResponse, BaseAIProvider } from './ai-providers/base-ai-provider';
 
 /**
  * Generic AI Conversation Context Manager
@@ -148,8 +76,6 @@ export class AIConversationContext {
     const message: ConversationMessage = {
       role,
       content,
-      timestamp: new Date(),
-      metadata
     };
 
     this.context.messages.push(message);
@@ -221,90 +147,91 @@ export class AIConversationContext {
   /**
    * Send a message and get AI response
    */
-  async sendMessage(userMessage: string, metadata?: Record<string, any>): Promise<ConversationResult> {
-    if (this.context.state !== 'active') {
-      throw new Error(`Cannot send message in ${this.context.state} state`);
-    }
+  // async sendMessage(userMessage: string, metadata?: Record<string, any>): Promise<ConversationResult> {
+  //   if (this.context.state !== 'active') {
+  //     throw new Error(`Cannot send message in ${this.context.state} state`);
+  //   }
 
-    if (this.context.turnCount >= this.context.config.maxTurns) {
-      this.setState('failed');
-      throw new Error('Maximum conversation turns exceeded');
-    }
+  //   if (this.context.turnCount >= this.context.config.maxTurns) {
+  //     this.setState('failed');
+  //     throw new Error('Maximum conversation turns exceeded');
+  //   }
 
-    // Add user message
-    this.addUserMessage(userMessage, metadata);
-    this.context.turnCount++;
+  //   // Add user message
+  //   this.addUserMessage(userMessage, metadata);
+  //   this.context.turnCount++;
 
-    try {
-      // Build prompt from conversation history
-      const prompt = this.buildPrompt();
+  //   try {
+  //     // Build prompt from conversation history
+  //     const prompt = this.buildPrompt();
+  //     this.addUserMessage(prompt);
+  //     // Get AI response using the existing AI provider interface
+  //     const response = await this.aiProvider.analyzeFiles({
+  //       files: [],
+  //       baseDirectory: '',
+  //       existingStructure: [],
+  //       userPreferences: {
+  //         customPrompt: prompt,
+  //         temperature: this.context.config.temperature,
+  //         ...this.context.config.aiSettings
+  //       }
+  //     }, this.context);
+
+  //     const aiResponse = response.reasoning || 'No response generated';
       
-      // Get AI response using the existing AI provider interface
-      const response = await this.aiProvider.analyzeFiles({
-        files: [],
-        baseDirectory: '',
-        existingStructure: [],
-        userPreferences: {
-          customPrompt: prompt,
-          temperature: this.context.config.temperature,
-          ...this.context.config.aiSettings
-        }
-      });
+  //     // Add assistant response
+  //     this.addAssistantMessage(aiResponse, {
+  //       confidence: 0.8,
+  //       suggestions: response.suggestions?.length || 0
+  //     });
 
-      const aiResponse = response.reasoning || 'No response generated';
-      
-      // Add assistant response
-      this.addAssistantMessage(aiResponse, {
-        confidence: 0.8,
-        suggestions: response.suggestions?.length || 0
-      });
+  //     // Parse the response for structured data
+  //     const result: ConversationResult = {
+  //       response: aiResponse,
+  //       needsInput: response.clarificationNeeded ? true : false,
+  //       questions: response.clarificationNeeded?.questions,
+  //       confidence: 0.8,
+  //       metadata: {
+  //         turnCount: this.context.turnCount,
+  //         timestamp: new Date()
+  //       }
+  //     };
 
-      // Parse the response for structured data
-      const result: ConversationResult = {
-        response: aiResponse,
-        needsInput: response.clarificationNeeded ? true : false,
-        questions: response.clarificationNeeded?.questions,
-        confidence: 0.8,
-        metadata: {
-          turnCount: this.context.turnCount,
-          timestamp: new Date()
-        }
-      };
+  //     // Try to parse JSON data if present
+  //     try {
+  //       const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+  //       if (jsonMatch) {
+  //         result.data = JSON.parse(jsonMatch[0]);
+  //       }
+  //     } catch (e) {
+  //       // No structured data, that's fine
+  //     }
 
-      // Try to parse JSON data if present
-      try {
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          result.data = JSON.parse(jsonMatch[0]);
-        }
-      } catch (e) {
-        // No structured data, that's fine
-      }
+  //     return result;
 
-      return result;
-
-    } catch (error) {
-      this.setState('failed');
-      throw new Error(`Conversation failed: ${error}`);
-    }
-  }
+  //   } catch (error) {
+  //     this.setState('failed');
+  //     throw new Error(`Conversation failed: ${error}`);
+  //   }
+  // }
 
   /**
    * Continue conversation with custom prompt
    */
-  async continueWithPrompt(customPrompt: string): Promise<ConversationResult> {
+  async continueWithPrompt(customPrompt: string, schema: ZodSchema): Promise<AIAnalysisResponse> {
     try {
-      const response = await this.aiProvider.analyzeFiles({
-        files: [],
-        baseDirectory: '',
-        existingStructure: [],
-        userPreferences: {
-          customPrompt,
-          temperature: this.context.config.temperature,
-          ...this.context.config.aiSettings
-        }
-      });
-
+      this.addUserMessage(customPrompt);
+      const response = await this.aiProvider.generateResponse({
+          files: [],
+          baseDirectory: '',
+          existingStructure: [],
+          userPreferences: {
+            customPrompt,
+            temperature: this.context.config.temperature,
+            ...this.context.config.aiSettings
+          }
+          }, this.context, schema);
+      
       const aiResponse = response.reasoning || 'No response generated';
       
       this.addAssistantMessage(aiResponse, {
@@ -312,16 +239,7 @@ export class AIConversationContext {
         confidence: 0.8
       });
 
-      return {
-        response: aiResponse,
-        needsInput: response.clarificationNeeded ? true : false,
-        questions: response.clarificationNeeded?.questions,
-        confidence: 0.8,
-        metadata: {
-          turnCount: this.context.turnCount,
-          timestamp: new Date()
-        }
-      };
+      return response;
 
     } catch (error) {
       throw new Error(`Custom prompt failed: ${error}`);

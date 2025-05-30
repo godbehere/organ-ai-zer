@@ -201,28 +201,32 @@ export class ConversationalOrganizer {
       if (result.discoveredCategories && Object.keys(result.discoveredCategories).length > 0) {
         console.log(chalk.blue('\n🔍 Here\'s what I discovered:\n'));
         Object.entries(result.discoveredCategories).forEach(([category, files]) => {
-          console.log(chalk.white(`  📁 ${category}: ${(files as string[]).length} files`));
+          console.log(chalk.white(`  📁 ${category}: ${(files as FileInfo[]).length} files`));
         });
         console.log();
       }
 
       // Handle clarification if needed
-      if (result.needsClarification) {
+      if (result.clarificationNeeded) {
         console.log(chalk.yellow('🤔 I have a few questions to better understand your preferences:\n'));
         
-        for (const question of result.needsClarification.questions) {
-          const { answer } = await inquirer.prompt([
-            {
-              type: 'input',
-              name: 'answer',
-              message: question,
-              validate: (input: string) => input.trim().length > 0 || 'Please provide an answer'
-            }
-          ]);
-          
-          await conversation.continueConversation(`Question: ${question}\nAnswer: ${answer}`);
-        }
+        let questionPrompt: string = '';
+
+          for (const question of result.clarificationNeeded.questions) {
+            const { answer } = await inquirer.prompt([
+              {
+                type: 'input',
+                name: 'answer',
+                message: question,
+                validate: (input: string) => input.trim().length > 0 || 'Please provide an answer'
+              }
+            ]);
+
+            questionPrompt += `Q: ${question}\nA: ${answer}\n`;
+          }
         
+          await conversation.continueConversation(questionPrompt);
+
         console.log(chalk.green('\n✅ Thanks for the clarification!\n'));
       }
 
@@ -248,15 +252,15 @@ export class ConversationalOrganizer {
       const spinner = ora('Generating organization suggestions...').start();
       
       try {
-        const suggestions = await conversation.generateFinalSuggestions();
-        spinner.succeed(`Generated ${suggestions.suggestions.length} organization suggestions`);
+        const results = await conversation.generateFinalSuggestions();
+        spinner.succeed(`Generated ${results.suggestions.length} organization suggestions`);
         
         // Show suggestions to user
-        const feedback = await this.presentSuggestions(suggestions.suggestions);
+        const feedback = await this.presentSuggestions(results.suggestions as OrganizationSuggestion[]);
         
         if (feedback.approved) {
           console.log(chalk.green('\n🎉 Great! Your organization plan is ready.\n'));
-          return suggestions.suggestions;
+          return results.suggestions as OrganizationSuggestion[];
         }
 
         // Process feedback and continue conversation

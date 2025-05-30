@@ -60,7 +60,7 @@ export class AIOrganizer {
     try {
       // Call AI service with spinner
       const spinner = ora(`🤖 Analyzing ${filteredFiles.length} files with ${config.ai.provider} (${config.ai.model})...`).start();
-      const aiResponse = await this.aiProvider!.analyzeFiles({
+      const aiResponse = await this.aiProvider!.analyzeFilesOld({
         files: filteredFiles,
         baseDirectory,
         existingStructure,

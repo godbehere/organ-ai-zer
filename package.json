@@ -33,7 +33,8 @@
     "joi": "^17.13.3",
     "mime-types": "^3.0.1",
     "openai": "^4.103.0",
-    "ora": "^8.2.0"
+    "ora": "^8.2.0",
+    "zod": "^3.25.36"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",

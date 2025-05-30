@@ -1,81 +1,17 @@
-import { FileInfo, OrganizationSuggestion } from '../types';
-import { BaseAIProvider } from './ai-providers/base-ai-provider';
-import { AIConversationContext, ConversationResult, ConversationConfig } from './ai-conversation-context';
-
-/**
- * Clarification phases where AI can ask questions
- */
-export enum ClarificationPhase {
-  INITIAL_ANALYSIS = 'analysis',
-  SUGGESTIONS = 'suggestions', 
-  REFINEMENT = 'refinement'
-}
-
-/**
- * Structured clarification data
- */
-export interface Clarification {
-  id: string;
-  phase: ClarificationPhase;
-  question: string;
-  answer: string;
-  context: string;
-  timestamp: Date;
-}
-
-/**
- * File organization specific conversation context data
- */
-export interface FileOrganizationContext {
-  /** Files to be organized */
-  files: FileInfo[];
-  /** Base directory for organization */
-  baseDirectory: string;
-  /** User's original intent for organization */
-  intent: string;
-  /** Organization suggestions that were rejected */
-  rejectedSuggestions: OrganizationSuggestion[];
-  /** Organization patterns that were approved */
-  approvedPatterns: string[];
-  /** AI-discovered categories and their files */
-  discoveredCategories: Record<string, FileInfo[]>;
-  /** Collected clarifications from user */
-  clarifications: Clarification[];
-  /** Current processing batch */
-  currentBatch?: {
-    name: string;
-    files: FileInfo[];
-  };
-  /** Organization phase */
-  phase: 'analysis' | 'conversation' | 'organization' | 'complete';
-  /** Optional pattern matching hints (if supplemental service is used) */
-  patternHints?: string[];
-}
-
-/**
- * Result from file organization conversation
- */
-export interface OrganizationConversationResult extends ConversationResult<OrganizationSuggestion[]> {
-  /** Organization suggestions */
-  suggestions: OrganizationSuggestion[];
-  /** AI-discovered categories */
-  discoveredCategories?: Record<string, string[]>;
-  /** Whether clarification is needed */
-  needsClarification?: {
-    questions: string[];
-    reason: string;
-  };
-}
-
-/**
- * User feedback on organization suggestions
- */
-export interface OrganizationFeedback {
-  approved: boolean;
-  feedback?: string;
-  specificIssues?: string[];
-  selectedSuggestions?: OrganizationSuggestion[];
-}
+import { 
+  AIAnalysisResponseSchema,
+    Clarification,
+    ClarificationPhase,
+    ConversationConfig,
+    FileInfo,
+    FileOrganizationContext,
+    FinalSuggestionsSchema,
+    OrganizationConversationResult,
+    OrganizationFeedback,
+    OrganizationSuggestion
+  } from '../types';
+import { AIAnalysisRequest, AIAnalysisResponse, BaseAIProvider } from './ai-providers/base-ai-provider';
+import { AIConversationContext } from './ai-conversation-context';
 
 /**
  * File Organization Conversation Manager
@@ -157,23 +93,33 @@ export class FileOrganizationConversation {
   /**
    * Start initial AI analysis - let AI discover categories and patterns
    */
-  async startAnalysis(): Promise<OrganizationConversationResult> {
+  async startAnalysis(): Promise<AIAnalysisResponse> {
     this.setPhase('analysis');
     
     const analysisPrompt = this.buildInitialAnalysisPrompt();
     
     try {
-      const result = await this.conversationContext.continueWithPrompt(analysisPrompt);
+      const result = await this.conversationContext.continueWithPrompt(analysisPrompt, AIAnalysisResponseSchema);
       
       // Parse AI's category discoveries and initial suggestions
-      const parsed = this.parseAnalysisResponse(result.response);
+      // const parsed = this.refineAnalysisResults(result);
       
+      if (result.suggestions) {
+        result.suggestions = result.suggestions.map((s: any) => ({
+          file: this.organizationContext.files.find(f => f.name === s.file)!,
+          suggestedPath: s.suggestedPath,
+          reason: s.reason,
+          confidence: s.confidence || 0.7,
+          category: s.category
+        }));
+      }
+
       // Store discovered categories - convert string arrays to FileInfo arrays
-      if (parsed.categories) {
+      if (result.discoveredCategories) {
         const discoveredCategories: Record<string, FileInfo[]> = {};
-        Object.entries(parsed.categories).forEach(([category, fileNames]) => {
-          discoveredCategories[category] = (fileNames as string[]).map(fileName =>
-            this.organizationContext.files.find(f => f.name === fileName)
+        Object.entries(result.discoveredCategories).forEach(([category, fileNames]) => {
+          discoveredCategories[category] = (fileNames).map(fileName =>
+            this.organizationContext.files.find(f => f.name === fileName.name)
           ).filter(Boolean) as FileInfo[];
         });
         this.organizationContext.discoveredCategories = discoveredCategories;
@@ -181,30 +127,25 @@ export class FileOrganizationConversation {
       }
 
       // Handle clarification questions if needed - with immediate re-analysis
-      if (result.questions && result.questions.length > 0) {
-        const reason = 'I need some clarification to provide better organization suggestions';
-        const context = 'Initial file analysis and categorization';
+      // if (result.questions && result.questions.length > 0) {
+      //   const reason = 'I need some clarification to provide better organization suggestions';
+      //   const context = 'Initial file analysis and categorization';
         
-        const clarificationsHandled = await this.handleClarifications(
-          result.questions,
-          reason,
-          ClarificationPhase.INITIAL_ANALYSIS,
-          context
-        );
+      //   const clarificationsHandled = await this.handleClarifications(
+      //     result.questions,
+      //     reason,
+      //     ClarificationPhase.INITIAL_ANALYSIS,
+      //     context
+      //   );
 
-        if (clarificationsHandled) {
-          // Immediately re-run analysis with new clarifications
-          console.log('🔄 Re-analyzing with your clarifications...\n');
-          return this.startAnalysis(); // Recursive call with new context
-        }
-      }
+      //   if (clarificationsHandled) {
+      //     // Immediately re-run analysis with new clarifications
+      //     console.log('🔄 Re-analyzing with your clarifications...\n');
+      //     return this.startAnalysis(); // Recursive call with new context
+      //   }
+      // }
 
-      return {
-        ...result,
-        suggestions: parsed.suggestions || [],
-        discoveredCategories: parsed.categories,
-        needsClarification: undefined // No clarification needed since we handled it
-      };
+      return result;
     } catch (error) {
       throw new Error(`Failed to start AI analysis: ${error}`);
     }
@@ -213,21 +154,30 @@ export class FileOrganizationConversation {
   /**
    * Continue conversation with user input
    */
-  async continueConversation(userMessage: string): Promise<OrganizationConversationResult> {
+  async continueConversation(userMessage: string): Promise<AIAnalysisResponse> {
     this.setPhase('conversation');
     
     try {
-      const result = await this.conversationContext.sendMessage(userMessage);
-      
-      // Parse any new suggestions or category updates
-      const parsed = this.parseConversationResponse(result.response);
-      
+      const analysisRequest: AIAnalysisRequest = {
+        files: this.organizationContext.files,
+        baseDirectory: this.organizationContext.baseDirectory,
+        // responseSchema: AIAnalysisResponseSchema,
+        existingStructure: [],
+        userPreferences: {
+          userMessage,
+          temperature: this.conversationContext.getContext().config.temperature,
+          ...this.conversationContext.getContext().config.aiSettings
+        }
+      };
+
+      const result = await this.conversationContext.continueWithPrompt(userMessage, AIAnalysisResponseSchema);
+
       // Update context with any new discoveries
-      if (parsed.categories) {
+      if (result.discoveredCategories) {
         const newCategories: Record<string, FileInfo[]> = {};
-        Object.entries(parsed.categories).forEach(([category, fileNames]) => {
-          newCategories[category] = (fileNames as string[]).map(fileName =>
-            this.organizationContext.files.find(f => f.name === fileName)
+        Object.entries(result.discoveredCategories).forEach(([category, fileNames]) => {
+          newCategories[category] = (fileNames as FileInfo[]).map(fileName =>
+            this.organizationContext.files.find(f => f.name === fileName.name)
           ).filter(Boolean) as FileInfo[];
         });
         
@@ -238,15 +188,7 @@ export class FileOrganizationConversation {
         this.conversationContext.setCustomContext('organization', this.organizationContext);
       }
 
-      return {
-        ...result,
-        suggestions: parsed.suggestions || [],
-        discoveredCategories: parsed.categories,
-        needsClarification: result.questions ? {
-          questions: result.questions,
-          reason: 'AI needs more information to provide better organization'
-        } : undefined
-      };
+      return result;
     } catch (error) {
       throw new Error(`Conversation failed: ${error}`);
     }
@@ -255,66 +197,35 @@ export class FileOrganizationConversation {
   /**
    * Generate final organization suggestions
    */
-  async generateFinalSuggestions(): Promise<OrganizationConversationResult> {
+  async generateFinalSuggestions(): Promise<AIAnalysisResponse> {
     this.setPhase('organization');
     
     try {
-      // Use the standard AI provider interface for final suggestions (not custom prompt)
-      // This ensures we get proper JSON response with suggestions array
-      const contextSummary = this.buildContextSummary();
+      // Use the conversation context to maintain consistency with the system prompt
+      const finalSuggestionsPrompt = this.buildFinalSuggestionsPrompt();
       
-      // Get AI provider from conversation context
-      const aiProvider = (this.conversationContext as any).aiProvider;
-      
-      const response = await aiProvider.analyzeFiles({
-        files: this.organizationContext.files,
-        baseDirectory: this.organizationContext.baseDirectory,
-        existingStructure: [],
-        userPreferences: {
-          intent: this.organizationContext.intent,
-          rejectedPatterns: this.organizationContext.rejectedSuggestions.map(s => s.suggestedPath),
-          approvedPatterns: this.organizationContext.approvedPatterns,
-          contextSummary: contextSummary,
-          clarifications: this.getClarificationsContext(),
-          // Increase token limit for final suggestions to handle all files
-          maxTokens: Math.max(4000, this.organizationContext.files.length * 150), // ~150 tokens per file suggestion
-          temperature: 0.3 // Lower temperature for final suggestions
-        }
-      });
+      const response = await this.conversationContext.continueWithPrompt(finalSuggestionsPrompt, FinalSuggestionsSchema);
       
       // Handle clarification questions if needed during suggestions
-      if (response.clarificationNeeded && response.clarificationNeeded.questions) {
-        const clarificationsHandled = await this.handleClarifications(
-          response.clarificationNeeded.questions,
-          response.clarificationNeeded.reason || 'I need clarification to provide better organization suggestions',
-          ClarificationPhase.SUGGESTIONS,
-          'Final organization suggestions generation'
-        );
+      // if (response.questions && response.questions.length > 0) {
+      //   const clarificationsHandled = await this.handleClarifications(
+      //     response.questions,
+      //     'I need clarification to provide better organization suggestions',
+      //     ClarificationPhase.SUGGESTIONS,
+      //     'Final organization suggestions generation'
+      //   );
 
-        if (clarificationsHandled) {
-          // Immediately re-run suggestions generation with new clarifications
-          console.log('🔄 Regenerating suggestions with your clarifications...\n');
-          return this.generateFinalSuggestions(); // Recursive call with new context
-        }
-      }
+      //   if (clarificationsHandled) {
+      //     // Immediately re-run suggestions generation with new clarifications
+      //     console.log('🔄 Regenerating suggestions with your clarifications...\n');
+      //     return this.generateFinalSuggestions(); // Recursive call with new context
+      //   }
+      // }
 
-      const suggestions = response.suggestions.map((suggestion: any) => ({
-        file: this.organizationContext.files.find(f => f.name === suggestion.suggestedPath.split('/').pop()) || 
-              this.organizationContext.files.find(f => f.name === suggestion.fileName) ||
-              suggestion.file!,
-        suggestedPath: suggestion.suggestedPath,
-        reason: suggestion.reason,
-        confidence: suggestion.confidence,
-        category: suggestion.category,
-        metadata: suggestion.metadata
-      }));
+      // Parse the final suggestions from the conversation response
+      response.suggestions = this.parseFinalSuggestions(response);
       
-      return {
-        response: response.reasoning,
-        suggestions,
-        needsInput: false,
-        needsClarification: undefined // No clarification needed since we handled it
-      };
+      return response;
     } catch (error) {
       throw new Error(`Failed to generate final suggestions: ${error}`);
     }
@@ -323,7 +234,7 @@ export class FileOrganizationConversation {
   /**
    * Process user feedback on suggestions
    */
-  async processFeedback(feedback: OrganizationFeedback): Promise<OrganizationConversationResult> {
+  async processFeedback(feedback: OrganizationFeedback): Promise<AIAnalysisResponse> {
     let feedbackMessage = '';
 
     if (feedback.approved) {
@@ -487,7 +398,32 @@ export class FileOrganizationConversation {
 - Explain your analysis and reasoning
 - Provide structured data when making suggestions
 - Ask specific questions only when needed for better organization
-- Focus on the user's intent and preferences`;
+- Focus on the user's intent and preferences
+
+**RESPONSE FORMAT:**
+Please respond conversationally, but include a JSON block with your discoveries:
+
+\`\`\`json
+{
+  "suggestions": [
+    {
+      "file": "example.ext",
+      "suggestedPath": "Category/example.ext", 
+      "reason": "Why this organization makes sense",
+      "confidence": 0.8
+      "category": "category_name",
+    }
+  ],
+  "discoveredCategories": {
+    "Category Name": ["file1.ext", "file2.ext"],
+    "Another Category": ["file3.ext"]
+  },
+  "reasoning": "Overall organization strategy explanation",
+  "clarificationNeeded": {
+    "questions": ["Question 1?", "Question 2?"],
+    "reason": "I need more information to provide better suggestions"
+}
+\`\`\``;
   }
 
   /**
@@ -519,29 +455,7 @@ Please analyze these files and help me understand what we're working with. I'd l
 
 4. **Initial Organization Ideas**: Do you have any initial thoughts on how these could be logically organized?
 
-Please be conversational in your response and explain your analysis. If you need clarification about my preferences or see multiple valid organization approaches, feel free to ask.
-
-**RESPONSE FORMAT:**
-Please respond conversationally, but include a JSON block with your discoveries:
-
-\`\`\`json
-{
-  "discoveredCategories": {
-    "Category Name": ["file1.ext", "file2.ext"],
-    "Another Category": ["file3.ext"]
-  },
-  "patterns": ["Pattern 1 description", "Pattern 2 description"],
-  "suggestions": [
-    {
-      "fileName": "example.ext",
-      "suggestedPath": "Category/example.ext", 
-      "reason": "Why this organization makes sense",
-      "confidence": 0.8
-    }
-  ],
-  "clarificationNeeded": ["Question 1?", "Question 2?"]
-}
-\`\`\``;
+Please be conversational in your response and explain your analysis. If you need clarification about my preferences or see multiple valid organization approaches, feel free to ask.`;
   }
 
   /**
@@ -561,11 +475,19 @@ ${this.organizationContext.files.map((file, index) =>
 
 Based on our conversation, please provide final organization suggestions for ALL ${this.organizationContext.files.length} files. Make sure every file has a specific organization suggestion.
 
+**CRITICAL CONSISTENCY REQUIREMENTS:**
+- **MEDIA FILES**: Critical to ensure naming conventions are consistent. Once a naming pattern is established for a category, apply it consistently to ALL files of that type
+- **TV SHOWS**: If you organize one TV show as "TV Shows/SeriesName/Season X/SeriesName SXX EXX Title", then ALL TV shows must follow this EXACT structure and naming format
+- **MOVIES**: Use consistent naming pattern for all movies (e.g., if one uses "Movies/Genre/Movie Title (Year)", then ALL movies must use this format)
+- **CODING PROJECTS**: Identify related files that belong to the same project. If a project is identified, structure must be maintained
+- **SAME TYPE = SAME FORMAT**: Files of the same type MUST use identical folder structure and naming patterns
+
 **REQUIREMENTS:**
 - Provide exactly ${this.organizationContext.files.length} suggestions (one for each file)
 - Use the categories and patterns we've discussed
-- Maintain consistency within each category
+- Maintain absolute consistency within each category
 - Consider all feedback provided
+- Apply the SAME naming pattern and folder structure for files of the same type/category
 
 **RESPONSE FORMAT:**
 \`\`\`json
@@ -583,7 +505,7 @@ Based on our conversation, please provide final organization suggestions for ALL
 }
 \`\`\`
 
-Please ensure every file is included in your suggestions.`;
+Please ensure every file is included in your suggestions and that consistency is maintained across similar file types.`;
   }
 
   /**
@@ -618,84 +540,26 @@ Please ensure every file is included in your suggestions.`;
   }
 
   /**
-   * Parse AI analysis response
-   */
-  private parseAnalysisResponse(response: string): {
-    categories?: Record<string, string[]>;
-    suggestions?: OrganizationSuggestion[];
-    patterns?: string[];
-  } {
-    try {
-      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
-      if (!jsonMatch) return {};
-
-      const parsed = JSON.parse(jsonMatch[1]);
-      
-      const result: any = {};
-      
-      // Handle different category field names the AI might use
-      if (parsed.discoveredCategories) {
-        result.categories = parsed.discoveredCategories;
-      } else if (parsed.discoveredContentTypes) {
-        result.categories = parsed.discoveredContentTypes;
-      } else if (parsed.categories) {
-        result.categories = parsed.categories;
-      } else if (parsed.contentTypes) {
-        result.categories = parsed.contentTypes;
-      }
-      
-      if (parsed.suggestions) {
-        result.suggestions = parsed.suggestions.map((s: any) => ({
-          file: this.organizationContext.files.find(f => f.name === s.fileName)!,
-          suggestedPath: s.suggestedPath,
-          reason: s.reason,
-          confidence: s.confidence || 0.7,
-          category: s.category
-        }));
-      }
-      
-      if (parsed.patterns) {
-        result.patterns = parsed.patterns;
-      }
-
-      return result;
-    } catch (error) {
-      console.warn('Failed to parse AI analysis response:', error);
-      return {};
-    }
-  }
-
-  /**
    * Parse conversation response
    */
-  private parseConversationResponse(response: string): {
-    categories?: Record<string, string[]>;
-    suggestions?: OrganizationSuggestion[];
-  } {
-    // Similar to parseAnalysisResponse but more lenient
-    return this.parseAnalysisResponse(response);
-  }
+  // private parseConversationResponse(response: string): {
+  //   categories?: Record<string, string[]>;
+  //   suggestions?: OrganizationSuggestion[];
+  // } {
+  //   // Similar to parseAnalysisResponse but more lenient
+  //   return this.parseAnalysisResponse(response);
+  // }
 
   /**
    * Parse final suggestions
    */
-  private parseFinalSuggestions(response: string): OrganizationSuggestion[] {
+  private parseFinalSuggestions(response: AIAnalysisResponse): OrganizationSuggestion[] {
     try {
-      const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
-      if (!jsonMatch) {
-        throw new Error('No JSON suggestions found');
-      }
 
-      const parsed = JSON.parse(jsonMatch[1]);
-      
-      if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
-        throw new Error('Invalid suggestions format');
-      }
-
-      return parsed.suggestions.map((s: any) => {
-        const file = this.organizationContext.files.find(f => f.name === s.fileName);
+      return response.suggestions.map((s: any) => {
+        const file = this.organizationContext.files.find(f => f.name === s.file);
         if (!file) {
-          throw new Error(`File not found: ${s.fileName}`);
+          throw new Error(`File not found: ${s.file}`);
         }
         
         return {

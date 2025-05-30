@@ -1,8 +1,10 @@
-import { FileInfo } from '../../types';
+import { ZodSchema } from 'zod';
+import { ConversationContext, FileInfo } from '../../types';
 
 export interface AIAnalysisRequest {
   files: FileInfo[];
   baseDirectory: string;
+  // responseSchema: ZodSchema;
   existingStructure?: string[];
   userPreferences?: any;
 }
@@ -16,6 +18,7 @@ export interface AIAnalysisResponse {
     category?: string;
     metadata?: any;
   }>;
+  discoveredCategories?: Record<string, FileInfo[]>;
   reasoning: string;
   clarificationNeeded?: {
     questions: string[];
@@ -45,7 +48,9 @@ export abstract class BaseAIProvider {
   }
 
   abstract getDefaultModel(): string;
-  abstract analyzeFiles(request: AIAnalysisRequest): Promise<AIAnalysisResponse>;
+  abstract generateResponse(request: AIAnalysisRequest, context: ConversationContext, schema: ZodSchema): Promise<AIAnalysisResponse>;
+  abstract analyzeFiles(request: AIAnalysisRequest, context: ConversationContext): Promise<AIAnalysisResponse>;
+  abstract analyzeFilesOld(request: AIAnalysisRequest): Promise<AIAnalysisResponse>;
 
   protected buildPrompt(request: AIAnalysisRequest): string {
     const { files, baseDirectory, existingStructure, userPreferences } = request;
