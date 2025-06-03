@@ -1,5 +1,5 @@
 import path from 'path';
-import { z } from 'zod';
+import { z, ZodSchema } from 'zod';
 
 export interface FileInfo {
   path: string;
@@ -38,59 +38,6 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 export interface ConversationMessage {
   role: MessageRole;
   content: string;
-}
-
-/**
- * Generic conversation context for any AI interaction
- */
-export interface ConversationContext {
-  /** Unique conversation ID */
-  id: string;
-  /** Subject/topic of the conversation */
-  subject: string;
-  /** Current conversation state */
-  state: 'active' | 'paused' | 'complete' | 'failed';
-  /** Conversation messages history */
-  messages: ConversationMessage[];
-  /** Custom context data specific to the conversation type */
-  customContext: Record<string, any>;
-  /** Configuration for this conversation */
-  config: ConversationConfig;
-  /** Creation timestamp */
-  createdAt: Date;
-  /** Last updated timestamp */
-  updatedAt: Date;
-  /** Number of turns/exchanges */
-  turnCount: number;
-}
-
-/**
- * File organization specific conversation context data
- */
-export interface FileOrganizationContext {
-  /** Files to be organized */
-  files: FileInfo[];
-  /** Base directory for organization */
-  baseDirectory: string;
-  /** User's original intent for organization */
-  intent: string;
-  /** Organization suggestions that were rejected */
-  rejectedSuggestions: OrganizationSuggestion[];
-  /** Organization patterns that were approved */
-  approvedPatterns: string[];
-  /** AI-discovered categories and their files */
-  discoveredCategories: Record<string, FileInfo[]>;
-  /** Collected clarifications from user */
-  clarifications: Clarification[];
-  /** Current processing batch */
-  currentBatch?: {
-    name: string;
-    files: FileInfo[];
-  };
-  /** Organization phase */
-  phase: 'analysis' | 'conversation' | 'organization' | 'complete';
-  /** Optional pattern matching hints (if supplemental service is used) */
-  patternHints?: string[];
 }
 
 /**
@@ -156,6 +103,58 @@ export interface Clarification {
   timestamp: Date;
 }
 
+/**
+ * Result from file organization conversation
+ */
+export interface OrganizationConversationResult extends ConversationResult<OrganizationSuggestion[]> {
+  /** Organization suggestions */
+  suggestions: OrganizationSuggestion[];
+  /** AI-discovered categories */
+  discoveredCategories?: Record<string, string[]>;
+  /** Whether clarification is needed */
+  needsClarification?: {
+    questions: string[];
+    reason: string;
+  };
+}
+
+/**
+ * User feedback on organization suggestions
+ */
+export interface OrganizationFeedback {
+  approved: boolean;
+  feedback?: string;
+  specificIssues?: string[];
+  selectedSuggestions?: OrganizationSuggestion[];
+}
+
+export interface AIAnalysisRequest {
+  prompt: string;
+  schema?: ZodSchema;
+}
+
+export interface AIAnalysisResponse {
+  suggestions: Array<{
+    file: FileInfo | null;
+    suggestedPath: string;
+    reason: string;
+    confidence: number;
+    category?: string;
+    metadata?: any;
+  }>;
+  discoveredCategories?: Record<string, FileInfo[]>;
+  reasoning: string;
+  clarificationNeeded?: {
+    questions: string[];
+    reason: string;
+  };
+}
+
+
+/**
+ * Schemas
+ */
+
 const FileInfoSchema = z.object({
   path: z.string(),
   name: z.string(),
@@ -166,6 +165,15 @@ const FileInfoSchema = z.object({
 });
 
 export const AIAnalysisResponseSchema = z.object({
+  discoveredCategories: z.record(z.string(), z.array(FileInfoSchema)).nullable(),
+  reasoning: z.string(),
+  clarificationNeeded: z.object({
+    questions: z.array(z.string()),
+    reason: z.string()
+  }).nullable()
+});
+
+export const AISuggestionsResponseSchema = z.object({
   suggestions: z.array(z.object({
     file: z.string().nullable(),
     suggestedPath: z.string(),
@@ -193,31 +201,6 @@ export const FinalSuggestionsSchema =   z.object({
     })),
     reasoning: z.string(),
   });
-
-/**
- * Result from file organization conversation
- */
-export interface OrganizationConversationResult extends ConversationResult<OrganizationSuggestion[]> {
-  /** Organization suggestions */
-  suggestions: OrganizationSuggestion[];
-  /** AI-discovered categories */
-  discoveredCategories?: Record<string, string[]>;
-  /** Whether clarification is needed */
-  needsClarification?: {
-    questions: string[];
-    reason: string;
-  };
-}
-
-/**
- * User feedback on organization suggestions
- */
-export interface OrganizationFeedback {
-  approved: boolean;
-  feedback?: string;
-  specificIssues?: string[];
-  selectedSuggestions?: OrganizationSuggestion[];
-}
 
 
 export * from './config';

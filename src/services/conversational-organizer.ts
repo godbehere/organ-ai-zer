@@ -5,8 +5,9 @@ import { FileInfo, OrganizationSuggestion, UserConfig } from '../types';
 import { ConfigService } from './config-service';
 import { OpenAIProvider, AnthropicProvider, BaseAIProvider } from './ai-providers';
 import { FileScanner } from './file-scanner';
-import { FileOrganizationConversation } from './file-organization-conversation';
 import { PatternMatchingService } from './pattern-matching-service';
+import { OrganizationConversation } from './organization-conversation';
+import { FileOrganizer } from './file-organizer';
 
 /**
  * Conversational File Organizer
@@ -46,11 +47,12 @@ export class ConversationalOrganizer {
       const intent = await this.getOrganizationIntent(files.length, directory);
       
       // Start AI conversation
-      const conversation = new FileOrganizationConversation(
+      const conversation = new OrganizationConversation(
         this.aiProvider!,
         files,
         directory,
-        intent
+        intent,
+        'ConversationalOrganizer',
       );
 
       // Optional: Add pattern matching hints
@@ -118,7 +120,7 @@ export class ConversationalOrganizer {
     const spinner = ora('Scanning files...').start();
     
     try {
-      const files = await this.fileScanner.scanDirectory(directory);
+      const files = await this.fileScanner.scanDirectory(directory, true);
       spinner.succeed(`Found ${files.length} files to analyze`);
       return files;
     } catch (error) {
@@ -177,7 +179,7 @@ export class ConversationalOrganizer {
   /**
    * Run the main conversation flow
    */
-  private async runConversation(conversation: FileOrganizationConversation): Promise<OrganizationSuggestion[]> {
+  private async runConversation(conversation: OrganizationConversation): Promise<OrganizationSuggestion[]> {
     // Phase 1: Initial AI Analysis
     const analysisResult = await this.runAnalysisPhase(conversation);
     
@@ -190,7 +192,7 @@ export class ConversationalOrganizer {
   /**
    * Phase 1: AI Analysis
    */
-  private async runAnalysisPhase(conversation: FileOrganizationConversation): Promise<any> {
+  private async runAnalysisPhase(conversation: OrganizationConversation): Promise<any> {
     const spinner = ora('AI is analyzing your files and discovering patterns...').start();
     
     try {
@@ -241,7 +243,7 @@ export class ConversationalOrganizer {
   /**
    * Phase 2: Conversation & Refinement
    */
-  private async runConversationPhase(conversation: FileOrganizationConversation, analysisResult: any): Promise<OrganizationSuggestion[]> {
+  private async runConversationPhase(conversation: OrganizationConversation, analysisResult: any): Promise<OrganizationSuggestion[]> {
     let attempts = 0;
     const maxAttempts = 4;
 
@@ -414,7 +416,6 @@ export class ConversationalOrganizer {
     if (config.organization.createBackups) {
       const spinner = ora('Creating backup...').start();
       try {
-        const FileOrganizer = (await import('./file-organizer')).FileOrganizer;
         const fileOrganizer = new FileOrganizer();
         const backupPath = await fileOrganizer.createBackup(suggestions[0].file.path.split('/').slice(0, -1).join('/'));
         spinner.succeed(`Backup created: ${backupPath}`);

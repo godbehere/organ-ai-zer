@@ -28,22 +28,22 @@ export async function interactiveOrganize(
     const suggestions = await conversationalOrganizer.organize(directory, options.dryRun || false);
     
     // If not dry run and we have suggestions, handle actual file operations
-    if (!options.dryRun && suggestions.length > 0) {
-      const config = await configService.loadConfig();
+    // if (!options.dryRun && suggestions.length > 0) {
+    //   const config = await configService.loadConfig();
       
-      // Create backup if enabled
-      if (config.organization.createBackups) {
-        const fileOrganizer = new FileOrganizer();
-        const backupPath = await fileOrganizer.createBackup(directory);
-        console.log(`📦 Backup created: ${backupPath}`);
-      }
+    //   // Create backup if enabled
+    //   if (config.organization.createBackups) {
+    //     const fileOrganizer = new FileOrganizer();
+    //     const backupPath = await fileOrganizer.createBackup(directory);
+    //     console.log(`📦 Backup created: ${backupPath}`);
+    //   }
 
-      // Apply organization suggestions
-      const fileOrganizer = new FileOrganizer();
-      await fileOrganizer.applySuggestions(suggestions);
+    //   // Apply organization suggestions
+    //   const fileOrganizer = new FileOrganizer();
+    //   await fileOrganizer.applySuggestions(suggestions);
       
-      console.log('✨ Organization complete! Your files are now organized.');
-    }
+    //   console.log('✨ Organization complete! Your files are now organized.');
+    // }
 
   } catch (error) {
     if (error instanceof Error && error.message.includes('cancelled')) {

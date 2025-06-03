@@ -12,7 +12,7 @@ export class FileOrganizer {
         const sourceDir = path.dirname(suggestion.file.path);
         sourceDirectories.add(sourceDir);
         
-        await this.moveFile(suggestion);
+        await this.moveFile(suggestion, sourceDir);
         console.log(`✅ Moved: ${suggestion.file.name} → ${suggestion.suggestedPath}`);
       } catch (error) {
         console.error(`❌ Failed to move ${suggestion.file.name}: ${error}`);
@@ -23,8 +23,8 @@ export class FileOrganizer {
     await this.cleanupEmptyDirectories(Array.from(sourceDirectories));
   }
 
-  private async moveFile(suggestion: OrganizationSuggestion): Promise<void> {
-    const targetDir = path.dirname(suggestion.suggestedPath);
+  private async moveFile(suggestion: OrganizationSuggestion, sourceDir: string): Promise<void> {
+    const targetDir = path.join(sourceDir, path.dirname(suggestion.suggestedPath));
     
     // Ensure target directory exists
     await fs.ensureDir(targetDir);
@@ -36,7 +36,7 @@ export class FileOrganizer {
     }
     
     // Move the file
-    await fs.move(suggestion.file.path, suggestion.suggestedPath);
+    await fs.move(path.resolve(suggestion.file.path), path.resolve(path.join(sourceDir, suggestion.suggestedPath)));
   }
 
   private async generateUniqueFilename(filePath: string): Promise<string> {
