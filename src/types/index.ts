@@ -148,11 +148,7 @@ export interface AIAnalysisResponse {
     questions: string[];
     reason: string;
   };
-  detectedProjects?: Array<{
-    name: string;
-    files: FileInfo[];
-    type: string;
-  }>;
+  detectedProjects?: DetectedProject[];
 }
 
 export interface CategoryConversationResponse {
@@ -160,6 +156,14 @@ export interface CategoryConversationResponse {
   inputType: 'choice' | 'freeform';
   choices?: string[];
   reasoning: string;
+}
+
+export interface DetectedProject {
+  name: string;
+  files: FileInfo[];
+  type: string;
+  rootPath: string;
+  indicators: string[];
 }
 
 

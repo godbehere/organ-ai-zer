@@ -241,6 +241,10 @@ export class OrganizationConversation extends Conversation {
         return this.context;
     }
 
+    complete(): void {
+        super.complete();
+    }
+
     async getCategoryConversation(category: string, files: FileInfo[]): Promise<CategoryConversationResponse> {
         try {
             const categoryPrompt = this.buildCategoryConversationPrompt(category, files);

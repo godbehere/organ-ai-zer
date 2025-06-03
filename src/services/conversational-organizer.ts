@@ -1,13 +1,14 @@
 import inquirer from 'inquirer';
 import ora from 'ora';
 import chalk from 'chalk';
-import { FileInfo, OrganizationSuggestion, UserConfig } from '../types';
+import { FileInfo, OrganizationSuggestion, UserConfig, DetectedProject } from '../types';
 import { ConfigService } from './config-service';
 import { OpenAIProvider, AnthropicProvider, BaseAIProvider } from './ai-providers';
 import { FileScanner } from './file-scanner';
 import { PatternMatchingService } from './pattern-matching-service';
 import { OrganizationConversation } from './organization-conversation';
 import { FileOrganizer } from './file-organizer';
+import { ProjectDetectionCache } from './project-detection-cache';
 
 /**
  * Conversational File Organizer
@@ -46,13 +47,18 @@ export class ConversationalOrganizer {
       // Get user intent conversationally
       const intent = await this.getOrganizationIntent(files.length, directory);
       
-      // Start AI conversation
+      // Start AI conversation with higher turn limit since categories use separate conversations
       const conversation = new OrganizationConversation(
         this.aiProvider!,
         files,
         directory,
         intent,
         'ConversationalOrganizer',
+        { 
+          maxTurns: 15, // Higher limit for main conversation
+          temperature: 0.4,
+          maxContextSize: 15000
+        }
       );
 
       // Optional: Add pattern matching hints
@@ -197,7 +203,7 @@ export class ConversationalOrganizer {
     
     // Step 1: Detect projects first
     const projectSpinner = ora('🔍 Detecting projects and analyzing file patterns...').start();
-    const detectedProjects = await this.detectProjects(conversation.getContext().getFiles());
+    const detectedProjects = await this.detectProjects(conversation.getContext().getFiles(), conversation.getContext().getBaseDirectory());
     
     if (detectedProjects.length > 0) {
       projectSpinner.succeed('Project detection complete!');
@@ -269,10 +275,20 @@ export class ConversationalOrganizer {
   }
 
   /**
-   * Detect coding projects and related file structures
+   * Detect coding projects and related file structures with caching
    */
-  private async detectProjects(files: FileInfo[]): Promise<Array<{name: string, files: FileInfo[], type: string}>> {
-    const projects: Array<{name: string, files: FileInfo[], type: string}> = [];
+  private async detectProjects(files: FileInfo[], baseDirectory: string): Promise<DetectedProject[]> {
+    if (files.length === 0) return [];
+    const projectCache = ProjectDetectionCache.getInstance();
+
+    // Try to get cached results first
+    const cachedProjects = await projectCache.getCachedProjects(baseDirectory, files);
+    if (cachedProjects) {
+      return cachedProjects;
+    }
+
+    // No cache hit, perform expensive detection
+    const projects: DetectedProject[] = [];
     
     // Group files by directory
     const filesByDirectory = new Map<string, FileInfo[]>();
@@ -333,10 +349,15 @@ export class ConversationalOrganizer {
         projects.push({
           name: projectName,
           files: projectFiles,
-          type: projectType
+          type: projectType,
+          rootPath: directory,
+          indicators
         });
       }
     }
+
+    // Cache the results for future use
+    await projectCache.cacheProjects(baseDirectory, files, projects);
 
     return projects;
   }
@@ -381,7 +402,7 @@ export class ConversationalOrganizer {
   /**
    * Show detected projects to user
    */
-  private showDetectedProjects(projects: Array<{name: string, files: FileInfo[], type: string}>): void {
+  private showDetectedProjects(projects: DetectedProject[]): void {
     console.log(chalk.blue('\n🏗️ Detected Projects:\n'));
     
     projects.forEach(project => {
@@ -419,7 +440,7 @@ export class ConversationalOrganizer {
    * Handle conversations about detected projects (standard handling)
    */
   private async handleProjectConversations(
-    detectedProjects: Array<{name: string, files: FileInfo[], type: string}>, 
+    detectedProjects: DetectedProject[], 
     conversation: OrganizationConversation
   ): Promise<void> {
     console.log(chalk.blue('🏗️ I detected coding projects. These will preserve their internal structure:\n'));
@@ -463,18 +484,36 @@ export class ConversationalOrganizer {
   }
 
   /**
-   * Get AI-generated conversation questions for a specific category
+   * Get AI-generated conversation questions for a specific category using isolated conversation
    */
   private async getCategoryConversationFromAI(
     category: string, 
     files: FileInfo[], 
-    conversation: OrganizationConversation
+    mainConversation: OrganizationConversation
   ): Promise<any> {
     const spinner = ora(`Analyzing ${category} files to understand organization options...`).start();
     
     try {
-      // Use the new schema-based method
-      const result = await conversation.getCategoryConversation(category, files);
+      // Create a separate conversation context for this category to avoid turn limit issues
+      const categoryConversation = new OrganizationConversation(
+        this.aiProvider!,
+        files,
+        mainConversation.getContext().getBaseDirectory(),
+        `Analyze organization options for ${category} files`,
+        `CategoryAnalysis_${category}`,
+        { 
+          maxTurns: 3, // Short limit for category discussions
+          temperature: 0.4,
+          maxContextSize: 8000
+        }
+      );
+
+      // Use the isolated conversation for category analysis
+      const result = await categoryConversation.getCategoryConversation(category, files);
+      
+      // Complete the category conversation since we're done with it
+      categoryConversation.complete();
+      
       spinner.succeed(`Generated organization options for ${category}`);
       return result;
       
