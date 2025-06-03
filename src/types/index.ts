@@ -148,6 +148,18 @@ export interface AIAnalysisResponse {
     questions: string[];
     reason: string;
   };
+  detectedProjects?: Array<{
+    name: string;
+    files: FileInfo[];
+    type: string;
+  }>;
+}
+
+export interface CategoryConversationResponse {
+  question: string;
+  inputType: 'choice' | 'freeform';
+  choices?: string[];
+  reasoning: string;
 }
 
 
@@ -201,6 +213,13 @@ export const FinalSuggestionsSchema =   z.object({
     })),
     reasoning: z.string(),
   });
+
+export const CategoryConversationSchema = z.object({
+  question: z.string(),
+  inputType: z.enum(['choice', 'freeform']),
+  choices: z.array(z.string()).nullable(),
+  reasoning: z.string()
+});
 
 
 export * from './config';

@@ -1,4 +1,4 @@
-import { AIAnalysisRequest, AIAnalysisResponse, AIAnalysisResponseSchema, AISuggestionsResponseSchema, Clarification, ClarificationPhase, ConversationConfig, FileInfo, FinalSuggestionsSchema, OrganizationFeedback, OrganizationSuggestion } from "../types";
+import { AIAnalysisRequest, AIAnalysisResponse, AIAnalysisResponseSchema, AISuggestionsResponseSchema, CategoryConversationResponse, CategoryConversationSchema, Clarification, ClarificationPhase, ConversationConfig, FileInfo, FinalSuggestionsSchema, OrganizationFeedback, OrganizationSuggestion } from "../types";
 import { BaseAIProvider } from "./ai-providers";
 import { Conversation } from "./conversation";
 import { OrganizationContext } from "./organization-context";
@@ -235,6 +235,79 @@ export class OrganizationConversation extends Conversation {
         hints.forEach(hint => {
             this.context.addPatternHint(hint);
         });
+    }
+
+    getContext(): OrganizationContext {
+        return this.context;
+    }
+
+    async getCategoryConversation(category: string, files: FileInfo[]): Promise<CategoryConversationResponse> {
+        try {
+            const categoryPrompt = this.buildCategoryConversationPrompt(category, files);
+
+            // Use direct AI provider call to get properly typed response
+            if (this.context.getState() !== 'active') {
+                throw new Error(`Cannot send message in ${this.context.getState()} state`);
+            }
+
+            if (this.context.getTurnCount() >= this.context.getConfig().maxTurns) {
+                this.context.setState('failed');
+                throw new Error('Maximum conversation turns exceeded');
+            }
+
+            this.context.addUserMessage(categoryPrompt);
+            this.context.incrementTurnCount();
+
+            const response = await this.aiProvider.generateResponse(this.context, CategoryConversationSchema);
+            
+            const aiResponse = response.reasoning || 'Category conversation generated';
+            this.context.addAssistantMessage(aiResponse);
+
+            return response as unknown as CategoryConversationResponse;
+
+        } catch (error) {
+            throw new Error(`Failed to get category conversation for ${category}: ${error}`);
+        }
+    }
+
+    private buildCategoryConversationPrompt(category: string, files: FileInfo[]): string {
+        const formatFileSize = (bytes: number): string => {
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let size = bytes;
+            let unitIndex = 0;
+            
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            
+            return `${size.toFixed(1)} ${units[unitIndex]}`;
+        };
+
+        return `I need to understand how the user wants to organize their ${category} files. I have ${files.length} files in this category.
+
+Sample files:
+${files.slice(0, 5).map(f => `- ${f.name} (${f.extension}, ${formatFileSize(f.size)})`).join('\n')}
+${files.length > 5 ? `... and ${files.length - 5} more files` : ''}
+
+Based on these ${category} files, please:
+1. Analyze the file types, naming patterns, and potential organization strategies
+2. Determine what organization approach would work best for this specific content
+3. Generate 3-5 specific, practical organization options that make sense for this content type
+4. Decide whether the user should choose from your suggested options OR provide free-form input
+5. Create an appropriate, clear question to ask the user
+
+Guidelines:
+- If there are clear, common patterns (like movies, TV shows, music), provide structured choices
+- If the content is unique or mixed, use free-form input
+- Make your question specific and actionable
+- Ensure your options are genuinely different approaches, not just variations
+
+Please respond with a JSON object containing:
+- "question": "A clear, specific question to ask the user"
+- "inputType": "choice" or "freeform"
+- "choices": ["option1", "option2", "option3"] (only include if inputType is "choice")
+- "reasoning": "Brief explanation of why this approach makes sense for this content type"`;
     }
 
 }

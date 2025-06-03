@@ -190,22 +190,43 @@ export class ConversationalOrganizer {
   }
 
   /**
-   * Phase 1: AI Analysis
+   * Phase 1: AI Analysis with Project Detection
    */
   private async runAnalysisPhase(conversation: OrganizationConversation): Promise<any> {
-    const spinner = ora('AI is analyzing your files and discovering patterns...').start();
+    console.log(chalk.blue('\n📁 Phase 1: Analyzing directory structure and content...'));
+    
+    // Step 1: Detect projects first
+    const projectSpinner = ora('🔍 Detecting projects and analyzing file patterns...').start();
+    const detectedProjects = await this.detectProjects(conversation.getContext().getFiles());
+    
+    if (detectedProjects.length > 0) {
+      projectSpinner.succeed('Project detection complete!');
+      this.showDetectedProjects(detectedProjects);
+    } else {
+      projectSpinner.succeed('Pattern analysis complete');
+    }
+    
+    // Step 2: AI Content Analysis
+    const aiSpinner = ora('🧠 Using AI to analyze file contents...').start();
+    aiSpinner.text = `🧠 Analyzing ${conversation.getContext().getFiles().length} files...`;
     
     try {
       const result = await conversation.startAnalysis();
-      spinner.succeed('AI analysis complete!');
+      aiSpinner.succeed('📊 Content Analysis Complete!');
       
       // Show what AI discovered
       if (result.discoveredCategories && Object.keys(result.discoveredCategories).length > 0) {
-        console.log(chalk.blue('\n🔍 Here\'s what I discovered:\n'));
+        console.log(chalk.blue('\n🔍 Content Categories Discovered:\n'));
         Object.entries(result.discoveredCategories).forEach(([category, files]) => {
-          console.log(chalk.white(`  📁 ${category}: ${(files as FileInfo[]).length} files`));
+          const categoryIcon = this.getCategoryIcon(category);
+          console.log(chalk.white(`   ${categoryIcon} ${category}: ${(files as FileInfo[]).length} files`));
         });
         console.log();
+      }
+
+      // Add detected projects to the result
+      if (detectedProjects.length > 0) {
+        result.detectedProjects = detectedProjects;
       }
 
       // Handle clarification if needed
@@ -242,15 +263,297 @@ export class ConversationalOrganizer {
       return result;
       
     } catch (error) {
-      spinner.fail('AI analysis failed');
+      aiSpinner.fail('AI analysis failed');
       throw error;
     }
   }
 
   /**
-   * Phase 2: Conversation & Refinement
+   * Detect coding projects and related file structures
+   */
+  private async detectProjects(files: FileInfo[]): Promise<Array<{name: string, files: FileInfo[], type: string}>> {
+    const projects: Array<{name: string, files: FileInfo[], type: string}> = [];
+    
+    // Group files by directory
+    const filesByDirectory = new Map<string, FileInfo[]>();
+    files.forEach(file => {
+      const dir = file.path.split('/').slice(0, -1).join('/');
+      if (!filesByDirectory.has(dir)) {
+        filesByDirectory.set(dir, []);
+      }
+      filesByDirectory.get(dir)!.push(file);
+    });
+
+    // Check each directory for project indicators
+    for (const [directory, dirFiles] of filesByDirectory) {
+      const indicators: string[] = [];
+      const projectFiles: FileInfo[] = [];
+      
+      // Check for common project files
+      const projectFilePatterns = [
+        'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+        'Cargo.toml', 'Cargo.lock',
+        'go.mod', 'go.sum',
+        'requirements.txt', 'setup.py', 'pyproject.toml', 'Pipfile',
+        'pom.xml', 'build.gradle', 'gradlew',
+        'Makefile', 'CMakeLists.txt',
+        '.gitignore', 'README.md', 'LICENSE',
+        'tsconfig.json', 'webpack.config.js', 'vite.config.js',
+        'Dockerfile', 'docker-compose.yml',
+        '.env', '.env.example'
+      ];
+
+      const codeExtensions = [
+        '.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte',
+        '.py', '.pyi', '.ipynb',
+        '.java', '.kt', '.scala',
+        '.c', '.cpp', '.h', '.hpp',
+        '.rs', '.go', '.rb', '.php',
+        '.cs', '.vb', '.fs',
+        '.swift', '.m', '.mm',
+        '.sh', '.bash', '.zsh', '.fish',
+        '.sql', '.graphql', '.proto'
+      ];
+
+      // Check for project configuration files
+      dirFiles.forEach(file => {
+        if (projectFilePatterns.includes(file.name.toLowerCase())) {
+          indicators.push(`Config file: ${file.name}`);
+          projectFiles.push(file);
+        } else if (codeExtensions.includes(file.extension.toLowerCase())) {
+          projectFiles.push(file);
+        }
+      });
+
+      // If we found project indicators and code files, consider it a project
+      if (indicators.length > 0 && projectFiles.length > 2) {
+        const projectName = directory.split('/').pop() || 'Unknown Project';
+        const projectType = this.inferProjectType(indicators, projectFiles);
+        
+        projects.push({
+          name: projectName,
+          files: projectFiles,
+          type: projectType
+        });
+      }
+    }
+
+    return projects;
+  }
+
+  /**
+   * Infer project type from indicators and files
+   */
+  private inferProjectType(indicators: string[], files: FileInfo[]): string {
+    const indicatorText = indicators.join(' ').toLowerCase();
+    const extensions = files.map(f => f.extension.toLowerCase());
+    
+    if (indicatorText.includes('package.json') || extensions.includes('.js') || extensions.includes('.jsx')) {
+      if (extensions.includes('.tsx') || extensions.includes('.ts')) {
+        return 'TypeScript/React project';
+      }
+      return 'JavaScript/Node.js project';
+    }
+    
+    if (indicatorText.includes('cargo.toml') || extensions.includes('.rs')) {
+      return 'Rust project';
+    }
+    
+    if (indicatorText.includes('go.mod') || extensions.includes('.go')) {
+      return 'Go project';
+    }
+    
+    if (indicatorText.includes('requirements.txt') || indicatorText.includes('setup.py') || extensions.includes('.py')) {
+      return 'Python project';
+    }
+    
+    if (indicatorText.includes('pom.xml') || indicatorText.includes('build.gradle') || extensions.includes('.java')) {
+      return 'Java project';
+    }
+    
+    if (extensions.includes('.c') || extensions.includes('.cpp') || indicatorText.includes('makefile')) {
+      return 'C/C++ project';
+    }
+    
+    return 'Code project';
+  }
+
+  /**
+   * Show detected projects to user
+   */
+  private showDetectedProjects(projects: Array<{name: string, files: FileInfo[], type: string}>): void {
+    console.log(chalk.blue('\n🏗️ Detected Projects:\n'));
+    
+    projects.forEach(project => {
+      console.log(chalk.white(`   • ${project.name} (${project.files.length} files) - ${project.type}`));
+    });
+    
+    console.log(chalk.green('\n✅ Project structures will be preserved during organization\n'));
+  }
+
+  /**
+   * Phase 2: Targeted Content-Type Conversations (AI-Driven)
    */
   private async runConversationPhase(conversation: OrganizationConversation, analysisResult: any): Promise<OrganizationSuggestion[]> {
+    console.log(chalk.blue('\n💬 Phase 2: Understanding your organization preferences...\n'));
+    
+    // Get discovered categories from analysis
+    const discoveredCategories = conversation.getContext().getDiscoveredCategories();
+    const detectedProjects = analysisResult.detectedProjects || [];
+    
+    // Handle detected projects first (these have standard handling)
+    if (detectedProjects.length > 0) {
+      await this.handleProjectConversations(detectedProjects, conversation);
+    }
+    
+    // Conduct AI-driven content-type specific conversations
+    if (Object.keys(discoveredCategories).length > 0) {
+      await this.handleAIDrivenContentConversations(discoveredCategories, conversation);
+    }
+    
+    // Generate final suggestions after all conversations
+    return this.generateFinalSuggestionsWithRetry(conversation);
+  }
+
+  /**
+   * Handle conversations about detected projects (standard handling)
+   */
+  private async handleProjectConversations(
+    detectedProjects: Array<{name: string, files: FileInfo[], type: string}>, 
+    conversation: OrganizationConversation
+  ): Promise<void> {
+    console.log(chalk.blue('🏗️ I detected coding projects. These will preserve their internal structure:\n'));
+    
+    detectedProjects.forEach(project => {
+      console.log(chalk.green(`   ✅ ${project.name} → Projects/${project.name}/ (structure preserved)`));
+    });
+    
+    console.log();
+    
+    // Send project info to AI for integration
+    const projectInfo = detectedProjects.map(p => `${p.name} (${p.type}, ${p.files.length} files)`).join(', ');
+    await conversation.continueConversation(
+      `I have ${detectedProjects.length} coding projects that will preserve their internal structure: ${projectInfo}. Please organize them appropriately while maintaining their project integrity.`
+    );
+  }
+
+  /**
+   * Handle AI-driven content-type conversations
+   */
+  private async handleAIDrivenContentConversations(
+    discoveredCategories: Record<string, FileInfo[]>, 
+    conversation: OrganizationConversation
+  ): Promise<void> {
+    
+    for (const [category, files] of Object.entries(discoveredCategories)) {
+      if (files.length === 0) continue;
+      
+      const categoryIcon = this.getCategoryIcon(category);
+      console.log(chalk.blue(`${categoryIcon} Let's discuss your ${category} files (${files.length} files detected):`));
+      
+      // Get AI-generated category-specific conversation
+      const categoryConversation = await this.getCategoryConversationFromAI(category, files, conversation);
+      
+      if (categoryConversation) {
+        await this.conductCategoryConversation(categoryConversation, category, conversation);
+      }
+      
+      console.log();
+    }
+  }
+
+  /**
+   * Get AI-generated conversation questions for a specific category
+   */
+  private async getCategoryConversationFromAI(
+    category: string, 
+    files: FileInfo[], 
+    conversation: OrganizationConversation
+  ): Promise<any> {
+    const spinner = ora(`Analyzing ${category} files to understand organization options...`).start();
+    
+    try {
+      // Use the new schema-based method
+      const result = await conversation.getCategoryConversation(category, files);
+      spinner.succeed(`Generated organization options for ${category}`);
+      return result;
+      
+    } catch (error) {
+      spinner.fail(`Failed to analyze ${category} files`);
+      console.log(chalk.yellow(`I'll ask you directly about your ${category} preferences.`));
+      return {
+        question: `How would you like your ${category} files organized?`,
+        inputType: "freeform" as const,
+        reasoning: "Fallback to direct question due to analysis error"
+      };
+    }
+  }
+
+  /**
+   * Conduct the actual conversation with the user for a category
+   */
+  private async conductCategoryConversation(
+    categoryConversation: any, 
+    category: string, 
+    conversation: OrganizationConversation
+  ): Promise<void> {
+    
+    let userResponse = '';
+    
+    if (categoryConversation.inputType === 'choice' && categoryConversation.choices?.length > 0) {
+      // Present AI-generated choices
+      const { choice } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'choice',
+          message: categoryConversation.question,
+          choices: [
+            ...categoryConversation.choices.map((choice: string) => ({
+              name: choice,
+              value: choice
+            })),
+            { name: 'Let me specify something different', value: 'custom' }
+          ]
+        }
+      ]);
+
+      if (choice === 'custom') {
+        const { customInput } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'customInput',
+            message: `Describe how you'd like your ${category} files organized:`,
+            validate: (input: string) => input.trim().length > 5 || 'Please provide more detail'
+          }
+        ]);
+        userResponse = customInput;
+      } else {
+        userResponse = choice;
+      }
+      
+    } else {
+      // Use free-form input as determined by AI
+      const { freeformInput } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'freeformInput',
+          message: categoryConversation.question || `How would you like your ${category} files organized?`,
+          validate: (input: string) => input.trim().length > 5 || 'Please provide more detail about your preferences'
+        }
+      ]);
+      userResponse = freeformInput;
+    }
+
+    // Send the user's response back to the AI with context
+    await conversation.continueConversation(
+      `For ${category} files: ${userResponse}. Please apply this organization preference consistently to all ${category} files.`
+    );
+  }
+
+  /**
+   * Generate final suggestions with retry logic
+   */
+  private async generateFinalSuggestionsWithRetry(conversation: OrganizationConversation): Promise<OrganizationSuggestion[]> {
     let attempts = 0;
     const maxAttempts = 4;
 
@@ -315,41 +618,113 @@ export class ConversationalOrganizer {
   }
 
   /**
-   * Present suggestions to user and get feedback
+   * Present suggestions to user and get feedback with category-grouped preview
    */
   private async presentSuggestions(suggestions: OrganizationSuggestion[]): Promise<any> {
-    // Show a sample of suggestions
-    const sampleSize = Math.min(8, suggestions.length);
-    const sample = suggestions.slice(0, sampleSize);
+    // Group suggestions by category
+    const categoryGroups = this.groupSuggestionsByCategory(suggestions);
     
-    console.log(chalk.blue(`\n📋 Here's how I'd organize your files (showing ${sampleSize} of ${suggestions.length}):\n`));
+    // Show category-grouped preview
+    await this.showCategoryGroupedPreview(categoryGroups, suggestions.length);
     
-    sample.forEach((suggestion, index) => {
-      console.log(chalk.white(`  ${index + 1}. ${suggestion.file.name}`));
-      console.log(chalk.gray(`     → ${suggestion.suggestedPath}`));
-      console.log(chalk.dim(`     ${suggestion.reason}\n`));
-    });
-
-    if (suggestions.length > sampleSize) {
-      console.log(chalk.gray(`  ... and ${suggestions.length - sampleSize} more files organized similarly.\n`));
-    }
-
-    // Get user feedback conversationally
+    // Get initial user choice
     const { response } = await inquirer.prompt([
       {
         type: 'list',
         name: 'response',
-        message: 'What do you think of this organization approach?',
+        message: 'What would you like to do?',
         choices: [
-          { name: '✅ Perfect! Apply this organization', value: 'approve' },
-          { name: '🔧 Good direction, but I\'d like some adjustments', value: 'adjust' },
-          { name: '❌ This isn\'t what I had in mind', value: 'reject' },
-          { name: '👀 Let me see a few more examples first', value: 'more_examples' },
+          { name: '✅ Continue with organization', value: 'approve' },
+          { name: '📂 View details for a specific category', value: 'view_category' },
+          { name: '📋 View all changes', value: 'view_all' },
+          { name: '🔧 Good direction, but needs adjustments', value: 'adjust' },
+          { name: '❌ Not what I want, let me explain differently', value: 'reject' },
           { name: '🚪 Cancel organization', value: 'cancel' }
         ]
       }
     ]);
 
+    return this.handlePreviewResponse(response, categoryGroups, suggestions);
+  }
+
+  /**
+   * Group suggestions by category for enhanced preview
+   */
+  private groupSuggestionsByCategory(suggestions: OrganizationSuggestion[]): Map<string, OrganizationSuggestion[]> {
+    const categoryGroups = new Map<string, OrganizationSuggestion[]>();
+    
+    suggestions.forEach(suggestion => {
+      const category = suggestion.category || this.inferCategoryFromPath(suggestion.suggestedPath);
+      
+      if (!categoryGroups.has(category)) {
+        categoryGroups.set(category, []);
+      }
+      categoryGroups.get(category)!.push(suggestion);
+    });
+    
+    return categoryGroups;
+  }
+
+  /**
+   * Infer category from suggested path if not explicitly set
+   */
+  private inferCategoryFromPath(path: string): string {
+    const topLevelDir = path.split('/')[0];
+    return topLevelDir || 'Other';
+  }
+
+  /**
+   * Show category-grouped preview with samples
+   */
+  private async showCategoryGroupedPreview(categoryGroups: Map<string, OrganizationSuggestion[]>, totalFiles: number): Promise<void> {
+    console.log(chalk.blue(`\n📋 Phase 3: Organization Plan Summary (${totalFiles} files total):`));
+    console.log(chalk.blue('═══════════════════════════════════════════════════════════\n'));
+
+    for (const [category, categorySuggestions] of categoryGroups) {
+      const categoryIcon = this.getCategoryIcon(category);
+      console.log(chalk.white(`${categoryIcon} ${category} (${categorySuggestions.length} files):`));
+      
+      // Show sample files for this category
+      const sampleSize = Math.min(3, categorySuggestions.length);
+      const samples = categorySuggestions.slice(0, sampleSize);
+      
+      samples.forEach(suggestion => {
+        console.log(chalk.gray(`   ${suggestion.file.name} → ${suggestion.suggestedPath}`));
+      });
+      
+      if (categorySuggestions.length > sampleSize) {
+        console.log(chalk.dim(`   ... and ${categorySuggestions.length - sampleSize} more files\n`));
+      } else {
+        console.log();
+      }
+    }
+  }
+
+  /**
+   * Get appropriate icon for category
+   */
+  private getCategoryIcon(category: string): string {
+    const categoryLower = category.toLowerCase();
+    
+    if (categoryLower.includes('movie')) return '📂';
+    if (categoryLower.includes('tv') || categoryLower.includes('show')) return '📺';
+    if (categoryLower.includes('music') || categoryLower.includes('audio')) return '🎵';
+    if (categoryLower.includes('photo') || categoryLower.includes('image')) return '📸';
+    if (categoryLower.includes('project') || categoryLower.includes('code')) return '🏗️';
+    if (categoryLower.includes('document')) return '📄';
+    if (categoryLower.includes('video')) return '🎬';
+    
+    return '📁';
+  }
+
+  /**
+   * Handle user response to preview
+   */
+  private async handlePreviewResponse(
+    response: string, 
+    categoryGroups: Map<string, OrganizationSuggestion[]>, 
+    allSuggestions: OrganizationSuggestion[]
+  ): Promise<any> {
     switch (response) {
       case 'approve':
         return { approved: true };
@@ -357,19 +732,11 @@ export class ConversationalOrganizer {
       case 'cancel':
         throw new Error('Organization cancelled by user');
 
-      case 'more_examples':
-        // Show more examples
-        if (suggestions.length > sampleSize) {
-          const additionalSample = suggestions.slice(sampleSize, sampleSize + 5);
-          console.log(chalk.blue('\n📋 Here are a few more examples:\n'));
-          
-          additionalSample.forEach((suggestion, index) => {
-            console.log(chalk.white(`  ${sampleSize + index + 1}. ${suggestion.file.name}`));
-            console.log(chalk.gray(`     → ${suggestion.suggestedPath}`));
-            console.log(chalk.dim(`     ${suggestion.reason}\n`));
-          });
-        }
-        return this.presentSuggestions(suggestions); // Ask again
+      case 'view_category':
+        return this.handleCategoryDetailView(categoryGroups, allSuggestions);
+
+      case 'view_all':
+        return this.handleViewAllChanges(allSuggestions);
 
       case 'adjust':
         const { adjustmentFeedback } = await inquirer.prompt([
@@ -401,6 +768,104 @@ export class ConversationalOrganizer {
   }
 
   /**
+   * Handle detailed view of a specific category
+   */
+  private async handleCategoryDetailView(
+    categoryGroups: Map<string, OrganizationSuggestion[]>, 
+    allSuggestions: OrganizationSuggestion[]
+  ): Promise<any> {
+    const categories = Array.from(categoryGroups.keys());
+    
+    const { selectedCategory } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'selectedCategory',
+        message: 'Which category would you like to explore in detail?',
+        choices: categories.map(cat => ({
+          name: `${this.getCategoryIcon(cat)} ${cat} (${categoryGroups.get(cat)!.length} files)`,
+          value: cat
+        }))
+      }
+    ]);
+
+    // Show detailed view of selected category
+    const categorySuggestions = categoryGroups.get(selectedCategory)!;
+    console.log(chalk.blue(`\n📂 Detailed view: ${selectedCategory}\n`));
+    
+    categorySuggestions.forEach((suggestion, index) => {
+      console.log(chalk.white(`  ${index + 1}. ${suggestion.file.name}`));
+      console.log(chalk.gray(`     → ${suggestion.suggestedPath}`));
+      console.log(chalk.dim(`     ${suggestion.reason}\n`));
+    });
+
+    // Ask what to do next
+    const { nextAction } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'nextAction',
+        message: 'What would you like to do now?',
+        choices: [
+          { name: '⬅️ Back to category overview', value: 'back' },
+          { name: '✅ Continue with organization', value: 'approve' },
+          { name: '🔧 I want to adjust this category', value: 'adjust_category' },
+          { name: '🚪 Cancel organization', value: 'cancel' }
+        ]
+      }
+    ]);
+
+    if (nextAction === 'back') {
+      return this.presentSuggestions(allSuggestions);
+    } else if (nextAction === 'adjust_category') {
+      const { categoryFeedback } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'categoryFeedback',
+          message: `How would you like to change the ${selectedCategory} category organization?`,
+          validate: (input: string) => input.trim().length > 5 || 'Please be specific about the changes'
+        }
+      ]);
+      
+      return { approved: false, feedback: `For ${selectedCategory} category: ${categoryFeedback}` };
+    } else {
+      return this.handlePreviewResponse(nextAction, categoryGroups, allSuggestions);
+    }
+  }
+
+  /**
+   * Handle viewing all changes
+   */
+  private async handleViewAllChanges(suggestions: OrganizationSuggestion[]): Promise<any> {
+    console.log(chalk.blue(`\n📋 Complete Organization Plan (${suggestions.length} files):\n`));
+    
+    suggestions.forEach((suggestion, index) => {
+      console.log(chalk.white(`  ${index + 1}. ${suggestion.file.name}`));
+      console.log(chalk.gray(`     → ${suggestion.suggestedPath}`));
+      console.log(chalk.dim(`     ${suggestion.reason}\n`));
+    });
+
+    // Ask what to do next
+    const { nextAction } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'nextAction',
+        message: 'What would you like to do now?',
+        choices: [
+          { name: '⬅️ Back to category overview', value: 'back' },
+          { name: '✅ Continue with organization', value: 'approve' },
+          { name: '🔧 I want to make adjustments', value: 'adjust' },
+          { name: '🚪 Cancel organization', value: 'cancel' }
+        ]
+      }
+    ]);
+
+    if (nextAction === 'back') {
+      return this.presentSuggestions(suggestions);
+    } else {
+      return this.handlePreviewResponse(nextAction, new Map(), suggestions);
+    }
+  }
+
+  /**
    * Execute the organization
    */
   private async executeOrganization(suggestions: OrganizationSuggestion[], baseDirectory: string): Promise<void> {
@@ -424,10 +889,11 @@ export class ConversationalOrganizer {
       const spinner = ora('Creating backup...').start();
       try {
         const fileOrganizer = new FileOrganizer();
-        const backupPath = await fileOrganizer.createBackup(suggestions[0].file.path.split('/').slice(0, -1).join('/'));
+        const backupPath = await fileOrganizer.createBackup(baseDirectory);
         spinner.succeed(`Backup created: ${backupPath}`);
       } catch (error) {
         spinner.warn('Backup creation failed, continuing without backup');
+        console.log(chalk.yellow(`Backup error: ${error}`));
       }
     }
 
