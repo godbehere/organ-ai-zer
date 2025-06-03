@@ -71,7 +71,7 @@ export class ConversationalOrganizer {
 
       // Execute organization (if not dry run)
       if (!dryRun) {
-        await this.executeOrganization(suggestions);
+        await this.executeOrganization(suggestions, directory);
       } else {
         this.showDryRunSummary(suggestions);
       }
@@ -226,8 +226,15 @@ export class ConversationalOrganizer {
 
             questionPrompt += `Q: ${question}\nA: ${answer}\n`;
           }
-        
+          
+        const clarificationSpinner = ora('Processing clarifications...').start();
+        try {
           await conversation.continueConversation(questionPrompt);
+          clarificationSpinner.succeed('Clarifications processed successfully!');
+        } catch (error) {
+          clarificationSpinner.fail('Failed to process clarifications');
+          throw error;
+        }
 
         console.log(chalk.green('\n✅ Thanks for the clarification!\n'));
       }
@@ -396,7 +403,7 @@ export class ConversationalOrganizer {
   /**
    * Execute the organization
    */
-  private async executeOrganization(suggestions: OrganizationSuggestion[]): Promise<void> {
+  private async executeOrganization(suggestions: OrganizationSuggestion[], baseDirectory: string): Promise<void> {
     const { confirmExecute } = await inquirer.prompt([
       {
         type: 'confirm',
@@ -429,7 +436,7 @@ export class ConversationalOrganizer {
     try {
       const FileOrganizer = (await import('./file-organizer')).FileOrganizer;
       const fileOrganizer = new FileOrganizer();
-      await fileOrganizer.applySuggestions(suggestions);
+      await fileOrganizer.applySuggestions(suggestions, baseDirectory);
       
       spinner.succeed(`Successfully organized ${suggestions.length} files!`);
       console.log(chalk.green('\n🎉 File organization complete!\n'));

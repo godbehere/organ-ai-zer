@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-// import { organize } from './commands/organize';
-// import { preview } from './commands/preview';
+import { organize } from './commands/organize';
+import { preview } from './commands/preview';
 import { init } from './commands/init';
 import { cache } from './commands/cache';
 import { interactiveOrganize } from './commands/interactive-organize';
@@ -22,22 +22,22 @@ program
   .option('-c, --config <path>', 'Custom config file path')
   .action(init);
 
-// program
-//   .command('organize')
-//   .description('Organize files in the specified directory')
-//   .argument('<directory>', 'Directory to organize')
-//   .option('-d, --dry-run', 'Preview changes without applying them')
-//   .option('-r, --recursive', 'Include subdirectories')
-//   .option('-c, --config <path>', 'Custom config file path')
-//   .action(organize);
+program
+  .command('organize')
+  .description('Organize files in the specified directory')
+  .argument('<directory>', 'Directory to organize')
+  .option('-d, --dry-run', 'Preview changes without applying them')
+  .option('-r, --recursive', 'Include subdirectories')
+  .option('-c, --config <path>', 'Custom config file path')
+  .action(organize);
 
-// program
-//   .command('preview')
-//   .description('Preview how files would be organized')
-//   .argument('<directory>', 'Directory to preview')
-//   .option('-r, --recursive', 'Include subdirectories')
-//   .option('-c, --config <path>', 'Custom config file path')
-//   .action(preview);
+program
+  .command('preview')
+  .description('Preview how files would be organized')
+  .argument('<directory>', 'Directory to preview')
+  .option('-r, --recursive', 'Include subdirectories')
+  .option('-c, --config <path>', 'Custom config file path')
+  .action(preview);
 
 program
   .command('interactive')

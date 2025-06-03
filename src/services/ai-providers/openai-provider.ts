@@ -4,6 +4,7 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { ZodSchema } from 'zod';
 import { ConversationContext } from '../conversation-context';
 import { AIAnalysisRequest, AIAnalysisResponse } from '../../types';
+import { AIAnalysisRequest as BaseProviderRequest } from './base-ai-provider';
 import { OrganizationContext } from '../organization-context';
 
 export class OpenAIProvider extends BaseAIProvider {
@@ -66,68 +67,48 @@ export class OpenAIProvider extends BaseAIProvider {
     }
   }
 
-  // async analyzeFiles(request: AIAnalysisRequest, context: ConversationContext): Promise<AIAnalysisResponse> {
-  //   try {
-  //     const prompt = this.buildPrompt(request);
-
-  //     // Use dynamic token limits from userPreferences if provided
-  //     const maxTokens = request.userPreferences?.maxTokens || this.maxTokens;
-  //     const temperature = request.userPreferences?.temperature || this.temperature;
-
-  //     const completion = await this.client.chat.completions.create({
-  //       model: this.model,
-  //       messages: context.getMessages(),
-  //       max_tokens: maxTokens,
-  //       temperature: temperature
-  //     });
-
-  //     // const completion = await this.client.chat.completions.create({
-  //     //   model: this.model,
-  //     //   messages: [
-  //     //     {
-  //     //       role: 'system',
-  //     //       content: 'You are an expert file organization assistant. Always respond with valid JSON only.'
-  //     //     },
-  //     //     {
-  //     //       role: 'user',
-  //     //       content: prompt
-  //     //     }
-  //     //   ],
-  //     //   max_tokens: maxTokens,
-  //     //   temperature: temperature
-  //     // });
-
-  //     const content = completion.choices[0]?.message?.content;
-  //     if (!content) {
-  //       throw new Error('No response content from OpenAI');
-  //     }
-
-  //     // For custom prompts, return the raw response without parsing
-  //     if (request.userPreferences?.customPrompt) {
-  //       return {
-  //         suggestions: [],
-  //         reasoning: content,
-  //         clarificationNeeded: undefined
-  //       };
-  //     }
-
-  //     const parsedResponse = this.parseAIResponse(content);
+  async analyzeFiles(request: BaseProviderRequest): Promise<AIAnalysisResponse> {
+    try {
+      const prompt = this.buildPrompt(request);
       
-  //     // Map the file objects back to the suggestions
-  //     parsedResponse.suggestions = parsedResponse.suggestions.map((suggestion, index) => {
-  //       const originalFile = request.files.find(f => f.name === suggestion.suggestedPath.split('/').pop());
-  //       return {
-  //         ...suggestion,
-  //         file: originalFile || request.files[index] || request.files[0]
-  //       };
-  //     });
+      const completion = await this.client.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert file organization assistant. Always respond with valid JSON only.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: this.maxTokens,
+        temperature: this.temperature
+      });
 
-  //     return parsedResponse;
-  //   } catch (error) {
-  //     if (error instanceof Error) {
-  //       throw new Error(`OpenAI API error: ${error.message}`);
-  //     }
-  //     throw new Error(`OpenAI API error: ${error}`);
-  //   }
-  // }
+      const content = completion.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No response content from OpenAI');
+      }
+
+      const parsedResponse = this.parseAIResponse(content);
+      
+      // Map the file objects back to the suggestions
+      parsedResponse.suggestions = parsedResponse.suggestions.map((suggestion, index) => {
+        const originalFile = request.files.find(f => f.name === suggestion.suggestedPath.split('/').pop());
+        return {
+          ...suggestion,
+          file: originalFile || request.files[index] || request.files[0]
+        };
+      });
+
+      return parsedResponse;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`OpenAI API error: ${error.message}`);
+      }
+      throw new Error(`OpenAI API error: ${error}`);
+    }
+  }
 }

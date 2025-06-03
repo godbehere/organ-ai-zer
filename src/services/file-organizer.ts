@@ -3,7 +3,7 @@ import * as path from 'path';
 import { OrganizationSuggestion } from '../types';
 
 export class FileOrganizer {
-  async applySuggestions(suggestions: OrganizationSuggestion[]): Promise<void> {
+  async applySuggestions(suggestions: OrganizationSuggestion[], baseDirectory?: string): Promise<void> {
     const sourceDirectories = new Set<string>();
     
     for (const suggestion of suggestions) {
@@ -12,7 +12,7 @@ export class FileOrganizer {
         const sourceDir = path.dirname(suggestion.file.path);
         sourceDirectories.add(sourceDir);
         
-        await this.moveFile(suggestion, sourceDir);
+        await this.moveFile(suggestion, baseDirectory);
         console.log(`✅ Moved: ${suggestion.file.name} → ${suggestion.suggestedPath}`);
       } catch (error) {
         console.error(`❌ Failed to move ${suggestion.file.name}: ${error}`);
@@ -23,20 +23,24 @@ export class FileOrganizer {
     await this.cleanupEmptyDirectories(Array.from(sourceDirectories));
   }
 
-  private async moveFile(suggestion: OrganizationSuggestion, sourceDir: string): Promise<void> {
-    const targetDir = path.join(sourceDir, path.dirname(suggestion.suggestedPath));
+  private async moveFile(suggestion: OrganizationSuggestion, baseDirectory?: string): Promise<void> {
+    // Resolve target path relative to base directory
+    const targetPath = baseDirectory ? 
+      path.resolve(baseDirectory, suggestion.suggestedPath) : 
+      path.resolve(suggestion.suggestedPath);
+    const targetDir = path.dirname(targetPath);
     
     // Ensure target directory exists
     await fs.ensureDir(targetDir);
     
     // Check if target file already exists
-    if (await fs.pathExists(suggestion.suggestedPath)) {
-      const newPath = await this.generateUniqueFilename(suggestion.suggestedPath);
-      suggestion.suggestedPath = newPath;
+    if (await fs.pathExists(targetPath)) {
+      const newPath = await this.generateUniqueFilename(targetPath);
+      suggestion.suggestedPath = path.relative(baseDirectory || process.cwd(), newPath);
     }
     
     // Move the file
-    await fs.move(path.resolve(suggestion.file.path), path.resolve(path.join(sourceDir, suggestion.suggestedPath)));
+    await fs.move(path.resolve(suggestion.file.path), targetPath);
   }
 
   private async generateUniqueFilename(filePath: string): Promise<string> {

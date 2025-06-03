@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { BaseAIProvider } from './base-ai-provider';
+import { AIAnalysisRequest, BaseAIProvider } from './base-ai-provider';
 import { ConversationContext } from '../conversation-context';
-import { AIAnalysisRequest, AIAnalysisResponse } from '../../types';
+import { AIAnalysisResponse } from '../../types';
 // import { ConversationContext } from '../../types';
 
 export class AnthropicProvider extends BaseAIProvider {
@@ -29,7 +29,7 @@ export class AnthropicProvider extends BaseAIProvider {
     throw new Error('Method not implemented.');
   }
 
-  async analyzeFilesOld(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
+  async analyzeFiles(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
     throw new Error('Method not implemented.');
   }
 
