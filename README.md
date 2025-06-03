@@ -4,12 +4,15 @@ An intelligent file organizer powered by AI that automatically categorizes and o
 
 ## Features
 
-- 🤖 **AI-Powered Organization**: Uses OpenAI or Anthropic models for intelligent file analysis
-- 📋 **Flexible Configuration**: Highly customizable organization rules and naming patterns
+- 🤖 **3-Phase Conversational AI**: Advanced AI architecture with analysis, conversation, and autonomous organization
+- 🧠 **True AI Content Analysis**: Goes beyond file extensions to understand actual file content and patterns
+- 🏗️ **Project Structure Preservation**: Automatically detects and maintains coding project integrity
+- 📋 **Enhanced Preview System**: Category grouping with samples and interactive exploration options
+- 🧹 **Automatic Cleanup**: Removes empty directories left after organization
 - 🔍 **Preview Mode**: See what changes will be made before applying them
 - 🛡️ **Safe Operations**: Automatic backups and dry-run capabilities
 - 🎯 **Smart Categorization**: Recognizes file types, dates, projects, and content patterns
-- ⚡ **CLI Interface**: Fast command-line tool for power users
+- ⚡ **CLI Interface**: Fast command-line tool with spinner animations and progress feedback
 
 ## Installation
 
@@ -53,6 +56,20 @@ npm install -g .
    ```bash
    organ-ai-zer organize ~/Downloads
    ```
+
+### New: 3-Phase Conversational AI Organization
+
+For complex organization needs, use the advanced conversational AI feature with intelligent 3-phase architecture:
+
+```bash
+organ-ai-zer interactive ~/Media
+```
+
+**Phase 1: AI Analysis** - Intelligently detects projects, analyzes file content, and identifies patterns
+**Phase 2: Conversation** - Conducts smart dialogue to understand your preferences for each content type
+**Phase 3: Organization** - Autonomously organizes files with enhanced preview and empty directory cleanup
+
+Perfect for media libraries, project files, and custom organization schemes with true AI content understanding.
 
 ### Alternative: Non-Interactive Setup
 
@@ -223,6 +240,37 @@ organ-ai-zer preview ~/Documents --recursive
 organ-ai-zer preview ~/Photos -c custom-config.json
 ```
 
+### `interactive`
+Interactive AI-guided organization with conversation.
+
+```bash
+organ-ai-zer interactive <directory> [options]
+```
+
+**Options:**
+- `-d, --dry-run`: Simulate organization without moving files
+- `-c, --config <path>`: Custom config file path
+
+**Example:**
+```bash
+# Interactive media library organization
+organ-ai-zer interactive ~/Media
+
+# Test with dry run first
+organ-ai-zer interactive ~/Downloads --dry-run
+
+# Organize work projects interactively
+organ-ai-zer interactive ~/Projects -c work-config.json
+```
+
+This command uses advanced 3-phase AI architecture:
+
+1. **AI Analysis Phase**: Intelligently detects coding projects, analyzes file content with AI, and identifies patterns
+2. **Conversation Phase**: Conducts targeted dialogue to understand your preferences for each detected content type
+3. **Organization Phase**: Executes organization with enhanced preview (category grouping, samples) and automatic empty directory cleanup
+
+Features true AI content analysis, project structure preservation, spinner animations during analysis, and interactive preview options. See [INTERACTIVE_ORGANIZE.md](INTERACTIVE_ORGANIZE.md) for detailed usage examples.
+
 ### `organize`
 Organize files according to AI suggestions.
 
@@ -315,6 +363,28 @@ If AI analysis fails:
 1. Application falls back to rule-based organization
 2. Uses file extensions and basic patterns
 3. Maintains functionality without AI dependency
+
+## Docker Testing Environment
+
+For safe testing without affecting your local files, use the Docker setup:
+
+```bash
+# Quick start - build and run interactive container
+./docker/test-runner.sh build
+./docker/test-runner.sh interactive
+
+# Inside container - test various scenarios
+organ-ai-zer preview /test-data/scenarios/messy-downloads
+organ-ai-zer interactive /test-data/scenarios/media-library --dry-run
+```
+
+The Docker environment includes:
+- 🗂️ **5 realistic test scenarios** (downloads, media, photos, work, desktop)
+- 🔒 **Safe isolated environment** - no risk to your local files  
+- ⚙️ **Pre-configured setup** - ready to test immediately
+- 📊 **Comprehensive test data** - movies, music, photos, documents, code
+
+See [DOCKER_TESTING.md](DOCKER_TESTING.md) for detailed setup and usage instructions.
 
 ## Troubleshooting
 

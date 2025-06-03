@@ -113,11 +113,21 @@ temp/
 test-files/
 test-data/
 backup_*/
+test-sandbox/
 
 # Local development
 .local/
 local-config.json
 dev-config.json
+
+# Docker test data (generated programmatically)
+test-data/
+test-files/
+**/test-scenarios/
+
+# Docker volumes and runtime files
+.docker/
+docker-data/
 
 # Package manager lock files (optional - choose one)
 # package-lock.json

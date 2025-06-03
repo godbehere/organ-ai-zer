@@ -95,7 +95,7 @@ export class ConfigService {
         model: Joi.string().optional(),
         maxTokens: Joi.number().min(100).max(4000).optional(),
         temperature: Joi.number().min(0).max(2).optional(),
-        timeout: Joi.number().min(1000).max(60000).optional()
+        timeout: Joi.number().min(1000).max(180000).optional()
       }).required(),
       organization: Joi.object({
         confidenceThreshold: Joi.number().min(0).max(1).required(),
@@ -155,7 +155,7 @@ export class ConfigService {
         model: Joi.string().optional(),
         maxTokens: Joi.number().min(100).max(4000).optional(),
         temperature: Joi.number().min(0).max(2).optional(),
-        timeout: Joi.number().min(1000).max(60000).optional()
+        timeout: Joi.number().min(1000).max(180000).optional()
       }).required(),
       organization: Joi.object({
         confidenceThreshold: Joi.number().min(0).max(1).required(),

@@ -1,5 +1,11 @@
 import OpenAI from 'openai';
-import { BaseAIProvider, AIAnalysisRequest, AIAnalysisResponse } from './base-ai-provider';
+import { BaseAIProvider } from './base-ai-provider';
+import { zodTextFormat } from "openai/helpers/zod";
+import { ZodSchema } from 'zod';
+import { ConversationContext } from '../conversation-context';
+import { AIAnalysisRequest, AIAnalysisResponse } from '../../types';
+import { AIAnalysisRequest as BaseProviderRequest } from './base-ai-provider';
+import { OrganizationContext } from '../organization-context';
 
 export class OpenAIProvider extends BaseAIProvider {
   private client: OpenAI;
@@ -19,10 +25,49 @@ export class OpenAIProvider extends BaseAIProvider {
   }
 
   getDefaultModel(): string {
-    return 'gpt-4';
+    return 'gpt-4o';
   }
 
-  async analyzeFiles(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
+  async generateResponse(context: ConversationContext, schema: ZodSchema): Promise<AIAnalysisResponse> {
+    try {
+
+      const response = await this.client.responses.parse({
+        model: this.model,
+        input: context.getMessages(),
+        text: {
+          format: zodTextFormat(schema, 'result')
+        }
+      });
+ 
+      // const response = testResponse;
+
+      const result = response.output_parsed;
+      if (!result) {
+        throw new Error('No response content from OpenAI');
+      }
+
+      const parsedResponse = result as AIAnalysisResponse;
+      
+      // Map the file objects back to the suggestions
+      // parsedResponse.suggestions = parsedResponse.suggestions.map((suggestion, index) => {
+      //   const originalFile = request.files.find(f => f.name === suggestion.suggestedPath.split('/').pop());
+      //   return {
+      //     ...suggestion,
+      //     file: originalFile || request.files[index] || request.files[0]
+      //   };
+      // });
+
+      return parsedResponse;
+
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`OpenAI API error: ${error.message}`);
+      }
+      throw new Error(`OpenAI API error: ${error}`);
+    }
+  }
+
+  async analyzeFiles(request: BaseProviderRequest): Promise<AIAnalysisResponse> {
     try {
       const prompt = this.buildPrompt(request);
       

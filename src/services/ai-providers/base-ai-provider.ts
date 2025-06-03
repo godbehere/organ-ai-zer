@@ -1,3 +1,6 @@
+import { ZodSchema } from 'zod';
+import { ConversationContext } from '../conversation-context';
+// import { OrganizationContext } from '../organization-context';
 import { FileInfo } from '../../types';
 
 export interface AIAnalysisRequest {
@@ -18,6 +21,7 @@ export interface AIAnalysisResponse {
   }>;
   reasoning: string;
 }
+
 
 export abstract class BaseAIProvider {
   protected apiKey: string;
@@ -41,10 +45,18 @@ export abstract class BaseAIProvider {
   }
 
   abstract getDefaultModel(): string;
+  abstract generateResponse(context: ConversationContext, schema: ZodSchema): Promise<AIAnalysisResponse>;
   abstract analyzeFiles(request: AIAnalysisRequest): Promise<AIAnalysisResponse>;
+  // abstract analyzeFilesOld(request: AIAnalysisRequest, context: OrganizationContext): Promise<AIAnalysisResponse>;
+
 
   protected buildPrompt(request: AIAnalysisRequest): string {
     const { files, baseDirectory, existingStructure, userPreferences } = request;
+    
+    // Check if this is an interactive/conversational request
+    if (userPreferences?.intent) {
+      return this.buildConversationalPrompt(request);
+    }
     
     return `You are an intelligent file organizer. Analyze the following files and suggest an optimal organization structure.
 
@@ -83,6 +95,57 @@ Return a JSON object with the following structure:
 }
 
 Important: Only return valid JSON. Do not include any explanatory text outside the JSON.`;
+  }
+
+  protected buildConversationalPrompt(request: AIAnalysisRequest): string {
+    const { files, baseDirectory, userPreferences } = request;
+    
+    return `You are an intelligent file organizer having a conversation with a user about organizing their files.
+
+**User's Intent:** ${userPreferences.intent}
+
+**Additional Context from Conversation:**
+${userPreferences.clarifications?.length > 0 ? userPreferences.clarifications.join('\n') : 'No additional clarifications yet.'}
+
+**Previously Rejected Organization Patterns:**
+${userPreferences.rejectedPatterns?.length > 0 ? 
+  userPreferences.rejectedPatterns.map((pattern: string) => `- ${pattern}`).join('\n') : 
+  'No rejected patterns yet.'}
+
+**Approved Organization Patterns:**
+${userPreferences.approvedPatterns?.length > 0 ? userPreferences.approvedPatterns.join('\n') : 'No approved patterns yet.'}
+
+**Files to Organize:**
+${files.slice(0, 20).map(file => `- ${file.name} (${file.extension}, ${this.formatFileSize(file.size)}, modified: ${file.modified.toISOString().split('T')[0]})`).join('\n')}
+${files.length > 20 ? `... and ${files.length - 20} more files` : ''}
+
+**Base Directory:** ${baseDirectory}
+
+**Instructions:**
+1. Analyze the user's intent and any conversation context
+2. Create an organization structure that matches their specific requirements
+3. Pay special attention to rejected patterns and avoid similar approaches
+4. Incorporate any approved patterns into your suggestions
+5. For media files, consider series/seasons, genres, years, quality, etc. as mentioned by the user
+6. Be consistent with naming conventions and folder structures
+7. Group related files together logically
+
+**Response Format:**
+Return a JSON object with the following structure:
+{
+  "suggestions": [
+    {
+      "fileName": "example.mkv",
+      "suggestedPath": "Movies/Action/2023/The_Movie_Title_2023_1080p.mkv",
+      "reason": "Action movie from 2023, organized by genre and year with quality indicator",
+      "confidence": 0.9,
+      "category": "movies"
+    }
+  ],
+  "reasoning": "Overall explanation of the organization strategy based on user intent"
+}
+
+Important: Only return valid JSON. Consider the user's specific requirements and conversation history.`;
   }
 
   private formatFileSize(bytes: number): string {

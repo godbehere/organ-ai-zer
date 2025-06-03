@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  organ-ai-zer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: organ-ai-zer-test
+    
+    # Mount volumes for persistent data and easy access
+    volumes:
+      # Test data persistence (optional - remove for fresh data each time)
+      - test-data:/test-data
+      
+      # Configuration persistence
+      - config-data:/root/.organ-ai-zer
+      
+      # Optional: Mount your local API key config
+      # - ./your-config.json:/root/.organ-ai-zer/config.json
+    
+    # Environment variables
+    environment:
+      - NODE_ENV=development
+      - TERM=xterm-256color
+    # Interactive mode
+    stdin_open: true
+    tty: true
+    
+    # Override command for different use cases
+    # command: bash  # Default: interactive shell
+    # command: organ-ai-zer preview /test-data/scenarios/messy-downloads
+    
+  # Optional: Separate service for one-time test runs
+  organ-ai-zer-test-run:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: organ-ai-zer-one-shot
+    volumes:
+      - test-data:/test-data
+      - config-data:/root/.organ-ai-zer
+    environment:
+      - NODE_ENV=development
+    # Run a specific test and exit
+    command: organ-ai-zer preview /test-data/scenarios/messy-downloads
+    profiles:
+      - test
+
+volumes:
+  test-data:
+    driver: local
+  config-data:
+    driver: local

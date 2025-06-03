@@ -1,6 +1,6 @@
 # Caching System
 
-Organ-AI-zer includes an intelligent caching system that stores AI suggestions to avoid redundant API calls and improve performance.
+Organ-AI-zer includes an intelligent multi-layer caching system that stores AI suggestions, pattern analysis, and project detection results to avoid redundant API calls and improve performance.
 
 ## How It Works
 
@@ -10,9 +10,11 @@ The cache automatically invalidates when:
 - **Configuration changes**: AI model, organization rules, or file type settings change
 - **Time expires**: Cache entries older than 10 minutes are discarded
 
-### 💾 Dual-Layer Storage
-- **Memory Cache**: Fast access for immediate `preview` → `organize` workflows
-- **Disk Cache**: Persistent storage at `~/.organ-ai-zer/cache/` for longer sessions
+### 💾 Multi-Layer Caching
+- **Suggestion Cache**: AI organization suggestions and reasoning
+- **Pattern Cache**: File pattern analysis (series, projects, dates)
+- **Project Detection Cache**: Detected coding projects and their structures
+- **Dual Storage**: Memory (fast) + Disk (persistent) for each cache type
 
 ### 🔍 Cache Key Generation
 Each directory gets a unique cache key based on:
@@ -45,8 +47,21 @@ organ-ai-zer cache stats
 ```
 ```
 📊 Cache Statistics:
-   Memory entries: 3
-   Disk cache dir: /home/user/.organ-ai-zer/cache
+
+🗂️ Suggestion Cache:
+   Memory entries: 2
+   TTL: 10 minutes
+   Cache directory: /home/user/.organ-ai-zer/cache/suggestions
+
+🏗️ Project Detection Cache:
+   Memory entries: 1
+   TTL: 10 minutes
+   Cache directory: /home/user/.organ-ai-zer/cache/projects
+
+🔍 Pattern Cache:
+   Memory entries: 1
+   TTL: 10 minutes
+   Cache directory: /home/user/.organ-ai-zer/cache/patterns
 ```
 
 #### Clear All Caches
@@ -54,6 +69,9 @@ organ-ai-zer cache stats
 organ-ai-zer cache clear
 ```
 ```
+🗑️  Cleared all suggestions caches
+🗑️  Cleared all projects caches
+🗑️  Cleared all patterns caches
 🗑️  Cleared all caches
 ```
 
@@ -70,7 +88,7 @@ organ-ai-zer cache clear -d ~/Downloads
 organ-ai-zer cache clean
 ```
 ```
-🧹 Cleaned expired cache entries
+🧹 Cleaned expired cache entries from all caches
 ```
 
 ## Cache Behavior
@@ -142,16 +160,24 @@ organ-ai-zer organize ~/Downloads # Cache miss - expired
 ### Disable Caching
 For testing or debugging, you can bypass cache:
 ```bash
-# This will be implemented in future versions
+# Force fresh AI analysis for all cache types
 organ-ai-zer preview ~/Downloads --no-cache
+organ-ai-zer organize ~/Downloads --no-cache
+organ-ai-zer interactive ~/Downloads --no-cache
 ```
 
 ### Cache Directory Structure
 ```
 ~/.organ-ai-zer/cache/
-├── a1b2c3d4e5f6.json    # Cache for /home/user/Downloads
-├── f6e5d4c3b2a1.json    # Cache for /home/user/Documents  
-└── 9876543210ab.json    # Cache for /home/user/Photos
+├── suggestions/
+│   ├── a1b2c3d4e5f6.json    # AI suggestions for /home/user/Downloads
+│   └── f6e5d4c3b2a1.json    # AI suggestions for /home/user/Documents
+├── projects/
+│   ├── projects_a1b2c3d4.json    # Project detection for Downloads
+│   └── projects_f6e5d4c3.json    # Project detection for Documents
+└── patterns/
+    ├── patterns_a1b2c3d4.json    # Pattern analysis for Downloads
+    └── patterns_f6e5d4c3.json    # Pattern analysis for Documents
 ```
 
 ### Cache File Format

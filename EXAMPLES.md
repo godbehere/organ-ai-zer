@@ -36,6 +36,24 @@ organ-ai-zer organize ~/Documents --dry-run --recursive
 organ-ai-zer organize ~/Documents --recursive
 ```
 
+### Interactive AI Organization (Recommended)
+
+```bash
+# For complex organization needs with personalized structure
+organ-ai-zer interactive ~/Media
+
+# Test first with dry-run
+organ-ai-zer interactive ~/Downloads --dry-run
+
+# Interactive organization features:
+# - AI content analysis (beyond file extensions)  
+# - Project structure preservation
+# - Targeted conversation for each content type
+# - Enhanced preview with category grouping
+# - Automatic empty directory cleanup
+# - Always includes subdirectories for comprehensive analysis
+```
+
 ## Scenario-Based Examples
 
 ### Organizing Downloaded Files

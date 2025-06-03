@@ -29,7 +29,8 @@ export async function organize(directory: string, options: OrganizeOptions): Pro
     console.log(`📁 Found ${files.length} files to process`);
 
     const aiOrganizer = new AIOrganizer(configService);
-    const suggestions = await aiOrganizer.generateSuggestions(files);
+    const useCache = !options.noCache;
+    const suggestions = await aiOrganizer.generateSuggestions(files, useCache);
     
     console.log(`🤖 Generated ${suggestions.length} organization suggestions`);
 

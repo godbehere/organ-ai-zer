@@ -1,4 +1,5 @@
-import { FileInfo, OrganizationSuggestion, UserConfig } from '../types';
+import ora from 'ora';
+import { AIAnalysisResponseSchema, FileInfo, OrganizationSuggestion, UserConfig } from '../types';
 import { ConfigService } from './config-service';
 import { OpenAIProvider, AnthropicProvider, BaseAIProvider } from './ai-providers';
 import { FileScanner } from './file-scanner';
@@ -57,16 +58,16 @@ export class AIOrganizer {
     const userPreferences = this.extractUserPreferences(config);
 
     try {
-      // Call AI service
-      console.log(`🤖 Calling ${config.ai.provider} API with model ${config.ai.model}...`);
+      // Call AI service with spinner
+      const spinner = ora(`🤖 Analyzing ${filteredFiles.length} files with ${config.ai.provider} (${config.ai.model})...`).start();
       const aiResponse = await this.aiProvider!.analyzeFiles({
         files: filteredFiles,
         baseDirectory,
         existingStructure,
         userPreferences
       });
-
-      console.log(`✅ AI analysis completed with ${aiResponse.suggestions.length} suggestions`);
+      
+      spinner.succeed(`✅ AI analysis completed with ${aiResponse.suggestions.length} suggestions`);
 
       // Convert AI response to OrganizationSuggestion format
       const suggestions = this.convertToOrganizationSuggestions(aiResponse.suggestions);
@@ -86,8 +87,9 @@ export class AIOrganizer {
 
       return finalSuggestions;
     } catch (error) {
-      console.error('❌ AI analysis failed:', error instanceof Error ? error.message : error);
-      console.error('🔄 Falling back to rule-based organization');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      ora().fail(`❌ AI analysis failed: ${errorMessage}`);
+      console.log('🔄 Falling back to rule-based organization');
       return this.fallbackToRuleBasedOrganization(filteredFiles);
     }
   }

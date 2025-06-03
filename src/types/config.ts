@@ -66,7 +66,7 @@ export const DEFAULT_CONFIG: UserConfig = {
     model: 'gpt-4',
     maxTokens: 1000,
     temperature: 0.3,
-    timeout: 30000
+    timeout: 90000
   },
   organization: {
     confidenceThreshold: 0.7,
