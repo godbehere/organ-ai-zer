@@ -23,11 +23,13 @@ export interface OrganizeOptions {
   dryRun?: boolean;
   recursive?: boolean;
   config?: string;
+  noCache?: boolean;
 }
 
 export interface PreviewOptions {
   recursive?: boolean;
   config?: string;
+  noCache?: boolean;
 }
 
 /**

@@ -29,6 +29,7 @@ program
   .option('-d, --dry-run', 'Preview changes without applying them')
   .option('-r, --recursive', 'Include subdirectories')
   .option('-c, --config <path>', 'Custom config file path')
+  .option('--no-cache', 'Bypass cache and force fresh AI analysis')
   .action(organize);
 
 program
@@ -37,6 +38,7 @@ program
   .argument('<directory>', 'Directory to preview')
   .option('-r, --recursive', 'Include subdirectories')
   .option('-c, --config <path>', 'Custom config file path')
+  .option('--no-cache', 'Bypass cache and force fresh AI analysis')
   .action(preview);
 
 program
@@ -45,6 +47,7 @@ program
   .argument('<directory>', 'Directory to organize with AI conversation')
   .option('-c, --config <path>', 'Custom config file path')
   .option('-d, --dry-run', 'Simulate organization without moving files')
+  .option('--no-cache', 'Bypass cache and force fresh AI analysis')
   .action(interactiveOrganize);
 
 program

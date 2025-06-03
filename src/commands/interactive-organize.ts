@@ -8,7 +8,7 @@ import { FileOrganizer } from '../services/file-organizer';
  */
 export async function interactiveOrganize(
   directory: string, 
-  options: { config?: string; dryRun?: boolean }
+  options: { config?: string; dryRun?: boolean; noCache?: boolean }
 ): Promise<void> {
   try {
     // Initialize services
@@ -25,7 +25,7 @@ export async function interactiveOrganize(
     const conversationalOrganizer = new ConversationalOrganizer(configService);
     
     // Run conversational organization (handles execution, backup, and cleanup internally)
-    await conversationalOrganizer.organize(directory, options.dryRun || false);
+    await conversationalOrganizer.organize(directory, options.dryRun || false, options.noCache || false);
 
   } catch (error) {
     if (error instanceof Error && error.message.includes('cancelled')) {

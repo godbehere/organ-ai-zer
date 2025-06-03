@@ -1,4 +1,5 @@
 import { FileInfo } from '../types';
+import { PatternCache } from './pattern-cache';
 
 /**
  * Pattern matching result for a file
@@ -53,6 +54,7 @@ export interface PatternAnalysis {
  */
 export class PatternMatchingService {
   private patterns: PatternMatcher[];
+  private cache: PatternCache;
 
   constructor() {
     this.patterns = [
@@ -65,12 +67,36 @@ export class PatternMatchingService {
       new ArchivePatternMatcher(),
       new TimestampPatternMatcher()
     ];
+    this.cache = PatternCache.getInstance();
   }
 
   /**
    * Analyze files for patterns and return insights for AI
    */
-  analyzePatterns(files: FileInfo[]): PatternAnalysis {
+  async analyzePatterns(files: FileInfo[], directory?: string): Promise<PatternAnalysis> {
+    // Check cache first if directory is provided
+    if (directory) {
+      const cachedAnalysis = await this.cache.getCachedAnalysis(directory, files);
+      if (cachedAnalysis) {
+        return cachedAnalysis;
+      }
+    }
+
+    // Perform pattern analysis
+    const analysis = this.performPatternAnalysis(files);
+
+    // Cache results if directory is provided
+    if (directory) {
+      await this.cache.cacheAnalysis(directory, files, analysis);
+    }
+
+    return analysis;
+  }
+
+  /**
+   * Perform the actual pattern analysis (non-cached)
+   */
+  private performPatternAnalysis(files: FileInfo[]): PatternAnalysis {
     const fileMatches = new Map<string, PatternMatch[]>();
     const allMatches: PatternMatch[] = [];
 
@@ -109,16 +135,16 @@ export class PatternMatchingService {
   /**
    * Get pattern hints that can be provided to AI for better analysis
    */
-  getPatternHints(files: FileInfo[]): string[] {
-    const analysis = this.analyzePatterns(files);
+  async getPatternHints(files: FileInfo[], directory?: string): Promise<string[]> {
+    const analysis = await this.analyzePatterns(files, directory);
     return analysis.hints;
   }
 
   /**
    * Check if files appear to be part of a series or collection
    */
-  findSeries(files: FileInfo[]): PatternGroup[] {
-    const analysis = this.analyzePatterns(files);
+  async findSeries(files: FileInfo[], directory?: string): Promise<PatternGroup[]> {
+    const analysis = await this.analyzePatterns(files, directory);
     return analysis.groups.filter(group => 
       group.type === 'series' || 
       group.type === 'episode_series' || 
@@ -129,8 +155,8 @@ export class PatternMatchingService {
   /**
    * Check if files appear to be project-related
    */
-  findProjects(files: FileInfo[]): PatternGroup[] {
-    const analysis = this.analyzePatterns(files);
+  async findProjects(files: FileInfo[], directory?: string): Promise<PatternGroup[]> {
+    const analysis = await this.analyzePatterns(files, directory);
     return analysis.groups.filter(group => group.type === 'project');
   }
 

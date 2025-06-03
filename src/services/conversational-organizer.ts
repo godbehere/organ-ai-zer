@@ -29,7 +29,8 @@ export class ConversationalOrganizer {
    */
   async organize(
     directory: string,
-    dryRun: boolean = false
+    dryRun: boolean = false,
+    noCache: boolean = false
   ): Promise<OrganizationSuggestion[]> {
     console.log(chalk.blue('🤖 Welcome to AI-powered file organization!\n'));
 
@@ -62,13 +63,13 @@ export class ConversationalOrganizer {
       );
 
       // Optional: Add pattern matching hints
-      const patternHints = await this.getPatternHints(files);
+      const patternHints = await this.getPatternHints(files, noCache ? undefined : directory);
       if (patternHints.length > 0) {
         conversation.addPatternHints(patternHints);
       }
 
       // Run conversational organization
-      const suggestions = await this.runConversation(conversation);
+      const suggestions = await this.runConversation(conversation, noCache);
       
       if (suggestions.length === 0) {
         console.log(chalk.yellow('\nNo organization suggestions were finalized.'));
@@ -163,11 +164,11 @@ export class ConversationalOrganizer {
   /**
    * Get pattern matching hints to help AI
    */
-  private async getPatternHints(files: FileInfo[]): Promise<string[]> {
+  private async getPatternHints(files: FileInfo[], directory?: string): Promise<string[]> {
     const spinner = ora('Analyzing file patterns...').start();
     
     try {
-      const hints = this.patternService.getPatternHints(files);
+      const hints = await this.patternService.getPatternHints(files, directory);
       
       if (hints.length > 0) {
         spinner.succeed('Found helpful patterns to guide organization');
@@ -185,9 +186,9 @@ export class ConversationalOrganizer {
   /**
    * Run the main conversation flow
    */
-  private async runConversation(conversation: OrganizationConversation): Promise<OrganizationSuggestion[]> {
+  private async runConversation(conversation: OrganizationConversation, noCache: boolean = false): Promise<OrganizationSuggestion[]> {
     // Phase 1: Initial AI Analysis
-    const analysisResult = await this.runAnalysisPhase(conversation);
+    const analysisResult = await this.runAnalysisPhase(conversation, noCache);
     
     // Phase 2: Conversation & Refinement
     const finalSuggestions = await this.runConversationPhase(conversation, analysisResult);
@@ -198,12 +199,16 @@ export class ConversationalOrganizer {
   /**
    * Phase 1: AI Analysis with Project Detection
    */
-  private async runAnalysisPhase(conversation: OrganizationConversation): Promise<any> {
+  private async runAnalysisPhase(conversation: OrganizationConversation, noCache: boolean = false): Promise<any> {
     console.log(chalk.blue('\n📁 Phase 1: Analyzing directory structure and content...'));
     
     // Step 1: Detect projects first
     const projectSpinner = ora('🔍 Detecting projects and analyzing file patterns...').start();
-    const detectedProjects = await this.detectProjects(conversation.getContext().getFiles(), conversation.getContext().getBaseDirectory());
+    const detectedProjects = await this.detectProjects(
+      conversation.getContext().getFiles(), 
+      conversation.getContext().getBaseDirectory(),
+      noCache
+    );
     
     if (detectedProjects.length > 0) {
       projectSpinner.succeed('Project detection complete!');
@@ -277,14 +282,16 @@ export class ConversationalOrganizer {
   /**
    * Detect coding projects and related file structures with caching
    */
-  private async detectProjects(files: FileInfo[], baseDirectory: string): Promise<DetectedProject[]> {
+  private async detectProjects(files: FileInfo[], baseDirectory: string, noCache: boolean = false): Promise<DetectedProject[]> {
     if (files.length === 0) return [];
     const projectCache = ProjectDetectionCache.getInstance();
 
-    // Try to get cached results first
-    const cachedProjects = await projectCache.getCachedProjects(baseDirectory, files);
-    if (cachedProjects) {
-      return cachedProjects;
+    // Try to get cached results first (unless cache is disabled)
+    if (!noCache) {
+      const cachedProjects = await projectCache.getCachedProjects(baseDirectory, files);
+      if (cachedProjects) {
+        return cachedProjects;
+      }
     }
 
     // No cache hit, perform expensive detection
@@ -356,8 +363,10 @@ export class ConversationalOrganizer {
       }
     }
 
-    // Cache the results for future use
-    await projectCache.cacheProjects(baseDirectory, files, projects);
+    // Cache the results for future use (unless cache is disabled)
+    if (!noCache) {
+      await projectCache.cacheProjects(baseDirectory, files, projects);
+    }
 
     return projects;
   }

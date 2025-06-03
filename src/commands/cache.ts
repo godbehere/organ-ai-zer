@@ -1,42 +1,53 @@
 import { SuggestionCache } from '../services/suggestion-cache';
 import { ProjectDetectionCache } from '../services/project-detection-cache';
+import { PatternCache } from '../services/pattern-cache';
 
 export async function cache(action: string, options: { directory?: string }): Promise<void> {
   try {
-    const cacheService = SuggestionCache.getInstance();
-    const projectCache = ProjectDetectionCache.getInstance();
+    // Get all cache instances using the unified BaseCache architecture
+    const caches = [
+      { name: 'Suggestion Cache', icon: '🗂️', instance: SuggestionCache.getInstance() },
+      { name: 'Project Detection Cache', icon: '🏗️', instance: ProjectDetectionCache.getInstance() },
+      { name: 'Pattern Cache', icon: '🔍', instance: PatternCache.getInstance() }
+    ];
 
     switch (action) {
       case 'clear':
-        await cacheService.clearCache(options.directory);
         if (options.directory) {
-          await projectCache.clearCache(options.directory);
+          // Clear cache for specific directory across all cache types
+          for (const cache of caches) {
+            await cache.instance.clearCache(options.directory);
+          }
           console.log(`🗑️  Cleared cache for directory: ${options.directory}`);
         } else {
-          await projectCache.clearAllCache();
+          // Clear all caches
+          for (const cache of caches) {
+            await cache.instance.clearCache();
+          }
           console.log('🗑️  Cleared all caches');
         }
         break;
 
       case 'clean':
-        await cacheService.cleanExpiredCache();
-        // Project cache doesn't have expired cache cleaning yet, but could be added
-        console.log('🧹 Cleaned expired cache entries');
+        // Clean expired entries from all caches
+        for (const cache of caches) {
+          await cache.instance.cleanExpiredCache();
+        }
+        console.log('🧹 Cleaned expired cache entries from all caches');
         break;
 
       case 'stats':
-        const suggestionStats = cacheService.getCacheStats();
-        const projectStats = await projectCache.getCacheStats();
         console.log('📊 Cache Statistics:');
         console.log('');
-        console.log('🗂️  Suggestion Cache:');
-        console.log(`   Memory entries: ${suggestionStats.memoryEntries}`);
-        console.log(`   Disk cache dir: ${suggestionStats.diskCacheDir}`);
-        console.log('');
-        console.log('🏗️  Project Detection Cache:');
-        console.log(`   Memory entries: ${projectStats.memoryCacheSize}`);
-        console.log(`   Disk cache files: ${projectStats.diskCacheFiles}`);
-        console.log(`   Total cache size: ${(projectStats.totalCacheSize / 1024).toFixed(1)} KB`);
+        
+        for (const cache of caches) {
+          const stats = cache.instance.getCacheStats();
+          console.log(`${cache.icon} ${cache.name}:`);
+          console.log(`   Memory entries: ${stats.memoryEntries}`);
+          console.log(`   TTL: ${Math.round(stats.ttlMs / 1000 / 60)} minutes`);
+          console.log(`   Cache directory: ${stats.diskCacheDir}`);
+          console.log('');
+        }
         break;
 
       default:

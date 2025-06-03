@@ -23,7 +23,8 @@ export async function preview(directory: string, options: PreviewOptions): Promi
     console.log(`📁 Found ${files.length} files to analyze`);
 
     const aiOrganizer = new AIOrganizer(configService);
-    const suggestions = await aiOrganizer.generateSuggestions(files);
+    const useCache = !options.noCache;
+    const suggestions = await aiOrganizer.generateSuggestions(files, useCache);
     
     console.log(`\n🤖 Organization Preview (${suggestions.length} suggestions):`);
     console.log('═'.repeat(60));
